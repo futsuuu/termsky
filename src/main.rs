@@ -4,6 +4,7 @@ mod command;
 mod event;
 mod tui;
 mod utils;
+mod view;
 
 use anyhow::Result;
 
@@ -15,9 +16,7 @@ async fn main() -> Result<()> {
     };
     tui::enter()?;
 
-    // many producers to single consumer
     let (event_tx, event_rx) = event::new_channel();
-    // single producer to many consumers
     let (command_tx, command_rx) = command::new_channel();
 
     tui::start(command_rx.clone(), event_tx.clone());

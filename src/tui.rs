@@ -3,11 +3,12 @@ use std::{io::stdout, time::Duration};
 use anyhow::Result;
 use crossterm::{
     cursor,
-    event::{self, EventStream},
+    event::{self as tui_event, EventStream},
     execute, queue, terminal,
 };
 use futures_util::{FutureExt, StreamExt};
 use ratatui::prelude::*;
+use tracing::{event, Level};
 
 use crate::{
     command::{Command, CommandRx},
@@ -26,6 +27,7 @@ async fn command_handler(mut command_rx: CommandRx) -> Result<()> {
 
     loop {
         if command_rx.changed().await.is_err() {
+            event!(Level::WARN, "command channel is closed");
             break;
         }
         match *command_rx.borrow_and_update() {
@@ -69,7 +71,7 @@ pub fn enter() -> Result<()> {
     queue!(
         stdout(),
         terminal::EnterAlternateScreen,
-        event::EnableMouseCapture,
+        tui_event::EnableMouseCapture,
         cursor::Hide,
     )?;
     Ok(())
@@ -80,7 +82,7 @@ pub fn exit() -> Result<()> {
     execute!(
         stdout(),
         terminal::LeaveAlternateScreen,
-        event::DisableMouseCapture,
+        tui_event::DisableMouseCapture,
         cursor::Show,
     )?;
     Ok(())

@@ -4,6 +4,7 @@ use anyhow::Result;
 use async_trait::async_trait;
 use atrium_api::agent::{store::SessionStore, AtpAgent, Session};
 use atrium_xrpc_client::reqwest::ReqwestClientBuilder;
+use tracing::{event, Level};
 
 use crate::{
     command::{Command, CommandRx},
@@ -23,7 +24,7 @@ async fn command_handler(mut command_rx: CommandRx, event_tx: EventTx) -> Result
     let session_store = FileStore::new()?;
     let agent = AtpAgent::new(xrpc_client, session_store.clone());
 
-    let session = if let Some(session) = session_store.get_session().await {
+    let mut session = if let Some(session) = session_store.get_session().await {
         agent
             .resume_session(session.clone())
             .await
@@ -35,10 +36,27 @@ async fn command_handler(mut command_rx: CommandRx, event_tx: EventTx) -> Result
 
     loop {
         if command_rx.changed().await.is_err() {
+            event!(Level::WARN, "command channel is closed");
             break;
         }
-        let event = match *command_rx.borrow_and_update() {
-            Command::GetSession => Event::GetSession(session.clone()),
+        let command = command_rx.borrow_and_update().clone();
+        let event = match command {
+            Command::GetSession => Event::Session(session.clone()),
+            Command::Login { ident, passwd } => {
+                let result = agent.login(ident, passwd).await;
+                let err = match result {
+                    Ok(s) => {
+                        event!(Level::INFO, "login successfully");
+                        session = Some(s);
+                        None
+                    }
+                    Err(err) => {
+                        event!(Level::WARN, "login failed: {err}");
+                        Some(String::from("login failed"))
+                    }
+                };
+                Event::Login { err }
+            }
             _ => continue,
         };
         if event_tx.send(event).is_err() {
@@ -58,12 +76,15 @@ impl FileStore {
     }
 
     fn open_file(&self) -> Option<File> {
-        File::options()
+        let file = File::options()
             .read(true)
             .write(true)
             .create(true)
-            .open(&self.0)
-            .ok()
+            .open(&self.0);
+        if file.is_err() {
+            event!(Level::ERROR, "failed to open the session file");
+        }
+        file.ok()
     }
 }
 
@@ -75,7 +96,6 @@ impl SessionStore for FileStore {
     }
 
     async fn set_session(&self, session: Session) {
-        self.clear_session().await;
         self.open_file()
             .and_then(|f| serde_json::to_writer(f, &session).ok());
     }
