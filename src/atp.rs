@@ -4,18 +4,25 @@ use anyhow::Result;
 use async_trait::async_trait;
 use atrium_api::agent::{store::SessionStore, AtpAgent, Session};
 use atrium_xrpc_client::reqwest::ReqwestClientBuilder;
+use tokio::sync::mpsc;
 use tracing::{event, Level};
 
-use crate::{
-    command::{Command, CommandRx},
-    event::{Event, EventTx},
-};
+use crate::app;
 
-pub fn start(command_rx: CommandRx, event_tx: EventTx) {
-    tokio::spawn(command_handler(command_rx, event_tx));
+pub enum Request {
+    GetSession,
+    Login { ident: String, passwd: String },
 }
 
-async fn command_handler(mut command_rx: CommandRx, event_tx: EventTx) -> Result<()> {
+pub enum Response {
+    Session(Option<Session>),
+    Login { err: Option<String> },
+}
+
+pub async fn handler(
+    mut rx: mpsc::UnboundedReceiver<Request>,
+    tx: mpsc::UnboundedSender<app::Response>,
+) -> Result<()> {
     const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
     let client = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
     let xrpc_client = ReqwestClientBuilder::new("https://bsky.social")
@@ -34,15 +41,10 @@ async fn command_handler(mut command_rx: CommandRx, event_tx: EventTx) -> Result
         None
     };
 
-    loop {
-        if command_rx.changed().await.is_err() {
-            event!(Level::WARN, "command channel is closed");
-            break;
-        }
-        let command = command_rx.borrow_and_update().clone();
-        let event = match command {
-            Command::GetSession => Event::Session(session.clone()),
-            Command::Login { ident, passwd } => {
+    while let Some(request) = rx.recv().await {
+        let res = match request {
+            Request::GetSession => Response::Session(session.clone()),
+            Request::Login { ident, passwd } => {
                 let result = agent.login(ident, passwd).await;
                 let err = match result {
                     Ok(s) => {
@@ -55,11 +57,11 @@ async fn command_handler(mut command_rx: CommandRx, event_tx: EventTx) -> Result
                         Some(String::from("login failed"))
                     }
                 };
-                Event::Login { err }
+                Response::Login { err }
             }
-            _ => continue,
         };
-        if event_tx.send(event).is_err() {
+
+        if tx.send(app::Response::Atp(res)).is_err() {
             break;
         }
     }

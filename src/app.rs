@@ -1,21 +1,31 @@
 use anyhow::Result;
 use crossterm::event::{Event as TuiEvent, KeyCode};
+use tokio::sync::mpsc;
 use tracing::{event, Level};
 
 use crate::{
-    command::{Command, CommandTx},
-    event::{recv, Event, EventRx},
+    atp, tui,
     view::{self, View},
 };
 
-pub async fn start(mut event_rx: EventRx, command_tx: CommandTx) -> Result<()> {
-    let mut view = View::Login(view::Login::new());
-    command_tx.send(Command::Render(view.clone()))?;
+pub enum Response {
+    Atp(atp::Response),
+    Tui(tui::Response),
+}
 
-    command_tx.send(Command::GetSession)?;
-    let session = recv!(event_rx, Event::Session(_));
-    let Some(Event::Session(session)) = session else {
-        return Ok(());
+pub async fn start(
+    mut res_rx: mpsc::UnboundedReceiver<Response>,
+    atp_tx: mpsc::UnboundedSender<atp::Request>,
+    tui_tx: mpsc::UnboundedSender<tui::Request>,
+) -> Result<()> {
+    let mut view = View::Login(view::Login::new());
+    tui_tx.send(tui::Request::Render(view.clone()))?;
+
+    atp_tx.send(atp::Request::GetSession)?;
+    let session = loop {
+        if let Response::Atp(atp::Response::Session(session)) = res_rx.recv().await.unwrap() {
+            break session;
+        }
     };
 
     if session.is_some() {
@@ -23,13 +33,14 @@ pub async fn start(mut event_rx: EventRx, command_tx: CommandTx) -> Result<()> {
     }
 
     loop {
-        command_tx.send(Command::Render(view.clone()))?;
-        let Some(event) = event_rx.recv().await else {
+        tui_tx.send(tui::Request::Render(view.clone()))?;
+        tui_tx.send(tui::Request::GetEvent)?;
+        let Some(res) = res_rx.recv().await else {
             break;
         };
 
         if let View::Login(ref mut login) = view {
-            if let Event::Tui(tui_event) = event {
+            if let Response::Tui(tui::Response::Event(tui_event)) = res {
                 if let TuiEvent::Key(key_event) = tui_event {
                     if key_event == KeyCode::Esc.into() {
                         if login.has_focus() {
@@ -42,7 +53,7 @@ pub async fn start(mut event_rx: EventRx, command_tx: CommandTx) -> Result<()> {
                         login.switch_focus();
                         continue;
                     } else if key_event == KeyCode::Enter.into() {
-                        command_tx.send(Command::Login {
+                        atp_tx.send(atp::Request::Login {
                             ident: login.get_ident(),
                             passwd: login.get_passwd(),
                         })?;
@@ -57,7 +68,7 @@ pub async fn start(mut event_rx: EventRx, command_tx: CommandTx) -> Result<()> {
                 continue;
             }
 
-            if let Event::Login { err } = event {
+            if let Response::Atp(atp::Response::Login { err }) = res {
                 if let Some(msg) = err {
                     event!(Level::WARN, "show error message");
                     login.set_error(msg);
@@ -72,7 +83,7 @@ pub async fn start(mut event_rx: EventRx, command_tx: CommandTx) -> Result<()> {
         }
 
         if let View::Home(ref mut _home) = view {
-            if let Event::Tui(tui_event) = event {
+            if let Response::Tui(tui::Response::Event(tui_event)) = res {
                 if tui_event == TuiEvent::Key(KeyCode::Esc.into()) {
                     break;
                 }
