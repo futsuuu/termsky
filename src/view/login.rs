@@ -7,7 +7,7 @@ use tui_textarea::TextArea;
 pub struct Login {
     focus: Focus,
     error: Option<String>,
-    wait: bool,
+    block: bool,
     ident: TextArea<'static>,
     passwd: TextArea<'static>,
 }
@@ -17,7 +17,7 @@ impl fmt::Debug for Login {
         f.debug_struct("Login")
             .field("focus", &self.focus)
             .field("error", &self.error)
-            .field("wait", &self.wait)
+            .field("block", &self.block)
             .field("ident", &self.ident.lines()[0])
             .field("passwd", &"***")
             .finish()
@@ -36,7 +36,7 @@ impl Login {
         Self {
             focus: Focus::Ident,
             error: None,
-            wait: false,
+            block: true,
             ident: create_textarea(false),
             passwd: create_textarea(true),
         }
@@ -45,12 +45,14 @@ impl Login {
     pub fn get_ident(&self) -> String {
         self.ident.lines()[0].to_string()
     }
-
     pub fn get_passwd(&self) -> String {
         self.passwd.lines()[0].to_string()
     }
 
     pub fn textarea(&mut self) -> Option<&mut TextArea<'static>> {
+        if self.block {
+            return None;
+        }
         match self.focus {
             Focus::Ident => Some(&mut self.ident),
             Focus::Passwd => Some(&mut self.passwd),
@@ -65,11 +67,9 @@ impl Login {
             Focus::None => Focus::Ident,
         };
     }
-
     pub fn lose_focus(&mut self) {
         self.focus = Focus::None;
     }
-
     pub fn has_focus(&self) -> bool {
         !matches!(self.focus, Focus::None)
     }
@@ -77,9 +77,16 @@ impl Login {
     pub fn set_error(&mut self, msg: String) {
         self.error = Some(msg);
     }
-
     pub fn unset_error(&mut self) {
         self.error = None;
+    }
+
+    pub fn block_input(&mut self) {
+        self.block = true;
+        self.lose_focus();
+    }
+    pub fn unblock_input(&mut self) {
+        self.block = false;
     }
 }
 
@@ -103,7 +110,7 @@ impl Widget for &Login {
 
         set_style(
             self.ident.clone(),
-            " identifier ",
+            " Handle name or Email address ",
             matches!(self.focus, Focus::Ident),
         )
         .widget()
@@ -111,7 +118,7 @@ impl Widget for &Login {
 
         set_style(
             self.passwd.clone(),
-            " password ",
+            " Password ",
             matches!(self.focus, Focus::Passwd),
         )
         .widget()
@@ -120,6 +127,7 @@ impl Widget for &Login {
         if let Some(err) = &self.error {
             Paragraph::new(err.as_str())
                 .alignment(Alignment::Center)
+                .wrap(Wrap { trim: true })
                 .render(layout[3], buf);
         }
     }

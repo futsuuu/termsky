@@ -90,9 +90,9 @@ dependencies = [
 
 [[package]]
 name = "atrium-api"
-version = "0.18.3"
+version = "0.18.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "46b5456d27bda69669ae7dfdab7c48d4634704646973c95a49c49cdb4acceb76"
+checksum = "f51d6ead8050648156aefe77e605e61619db2ebee7b6fdd5678d860fe943484e"
 dependencies = [
  "async-trait",
  "atrium-xrpc",
@@ -108,9 +108,9 @@ dependencies = [
 
 [[package]]
 name = "atrium-xrpc"
-version = "0.10.2"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "524c96187f2d673f866f7c69c4b2bd696eef8553ad6e0159797fac175b979808"
+checksum = "5b9af530c5562f70d54d445e5fafe5100b2be7742dbe863b8c8755cd6512408b"
 dependencies = [
  "async-trait",
  "http",

@@ -32,7 +32,6 @@ fn setup_tracing() -> Result<()> {
     tracing_subscriber::fmt()
         .with_level(true)
         .with_writer(Mutex::new(file))
-        .without_time()
         .with_max_level(Level::TRACE)
         .init();
     event!(Level::TRACE, "start tracing");

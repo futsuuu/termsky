@@ -1,7 +1,7 @@
 use anyhow::Result;
+use atrium_api::app::bsky;
 use crossterm::event::{Event as TuiEvent, KeyCode};
 use tokio::sync::mpsc;
-use tracing::{event, Level};
 
 use crate::{
     atp, tui,
@@ -57,6 +57,7 @@ pub async fn start(
                             ident: login.get_ident(),
                             passwd: login.get_passwd(),
                         })?;
+                        login.block_input();
                         continue;
                     }
                 }
@@ -68,10 +69,10 @@ pub async fn start(
                 continue;
             }
 
-            if let Response::Atp(atp::Response::Login { err }) = res {
-                if let Some(msg) = err {
-                    event!(Level::WARN, "show error message");
-                    login.set_error(msg);
+            if let Response::Atp(atp::Response::Login(result)) = res {
+                if let Err(e) = result {
+                    login.set_error(e.to_string());
+                    login.unblock_input();
                 } else {
                     view.update(view::Home::new());
                 }
@@ -82,10 +83,28 @@ pub async fn start(
             continue;
         }
 
-        if let View::Home(ref mut _home) = view {
+        if let View::Home(ref mut home) = view {
+            if home.new_posts_required() {
+                atp_tx.send(atp::Request::GetTimeline(
+                    bsky::feed::get_timeline::Parameters {
+                        algorithm: None,
+                        cursor: None,
+                        limit: 1.try_into().ok(),
+                    },
+                ))?;
+                home.wait_response();
+            }
+
             if let Response::Tui(tui::Response::Event(tui_event)) = res {
                 if tui_event == TuiEvent::Key(KeyCode::Esc.into()) {
                     break;
+                }
+                continue;
+            }
+
+            if let Response::Atp(atp::Response::Timeline(Ok(timeline))) = res {
+                for post in timeline.feed.into_iter().rev() {
+                    home.add_received_post(post, true);
                 }
             }
         }

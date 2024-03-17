@@ -10,7 +10,7 @@ futures-util = "0.3"
 tracing = { version = "0.1", features = ["release_max_level_off", "max_level_trace"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt"] }
 
-atrium-api = "0.18.3"
+atrium-api = "0.18.6"
 atrium-xrpc-client = "0.5.0"
 reqwest = "0.11"
 dirs = "5.0"
