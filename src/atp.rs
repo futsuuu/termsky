@@ -21,23 +21,6 @@ pub enum Request {
     Login { ident: String, passwd: String },
 }
 
-impl fmt::Debug for Request {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Request::GetSession => f.write_str("GetSession"),
-            Request::GetTimeline(params) => f.debug_tuple("GetTimeline").field(&params).finish(),
-            Request::Login {
-                ident,
-                passwd: _passwd,
-            } => f
-                .debug_struct("Login")
-                .field("ident", &ident)
-                .field("passwd", &"***")
-                .finish(),
-        }
-    }
-}
-
 pub enum Response {
     Session(Option<Session>),
     Timeline(Result<bsky::feed::get_timeline::Output>),
@@ -51,66 +34,83 @@ enum RawResponse {
     Login,
 }
 
-pub async fn handler(
-    mut rx: mpsc::UnboundedReceiver<Request>,
-    tx: mpsc::UnboundedSender<app::Response>,
-) -> Result<()> {
-    const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-    let xrpc_client = ReqwestClientBuilder::new("https://bsky.social")
-        .client(reqwest::Client::builder().user_agent(USER_AGENT).build()?)
-        .build();
-    let session_store = FileStore::new()?;
-    let agent = AtpAgent::new(xrpc_client, session_store.clone());
+pub struct Atp {
+    req_rx: mpsc::UnboundedReceiver<Request>,
+    res_tx: mpsc::UnboundedSender<app::Response>,
+    agent: AtpAgent<FileStore, ReqwestClient>,
+    session: Option<Session>,
+    session_store: FileStore,
+}
 
-    let mut session = if let Some(session) = session_store.get_session().await {
-        agent
-            .resume_session(session.clone())
-            .await
-            .ok()
-            .and(Some(session))
-    } else {
-        None
-    };
+impl Atp {
+    pub fn new(
+        req_rx: mpsc::UnboundedReceiver<Request>,
+        res_tx: mpsc::UnboundedSender<app::Response>,
+    ) -> Result<Self> {
+        const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
+        let xrpc_client = ReqwestClientBuilder::new("https://bsky.social")
+            .client(reqwest::Client::builder().user_agent(USER_AGENT).build()?)
+            .build();
+        let session_store = FileStore::new()?;
+        let agent = AtpAgent::new(xrpc_client, session_store.clone());
+        Ok(Self {
+            req_rx,
+            res_tx,
+            agent,
+            session: None,
+            session_store,
+        })
+    }
 
-    while let Some(request) = rx.recv().await {
-        let raw_response = handle_request(request.clone(), &agent, &mut session).await;
-        let response = convert_raw_response(raw_response, request);
-        if tx.send(app::Response::Atp(response)).is_err() {
-            break;
+    pub async fn start(&mut self) -> Result<()> {
+        while let Some(req) = self.req_rx.recv().await {
+            let r_res = self.handle_request(req.clone()).await;
+            let res = convert_raw_response(r_res, req);
+            if self.res_tx.send(app::Response::Atp(res)).is_err() {
+                break;
+            }
+        }
+        event!(Level::DEBUG, "stop handler: channel closed");
+        Ok(())
+    }
+
+    #[instrument(name = "atp", err, ret, skip(self), fields(session = self.handle()))]
+    async fn handle_request(&mut self, request: Request) -> Result<RawResponse> {
+        let res = match request {
+            Request::GetSession => {
+                let session = self.get_session().await;
+                RawResponse::Session(session)
+            }
+            Request::GetTimeline(params) => {
+                let timeline = self.agent.api.app.bsky.feed.get_timeline(params).await?;
+                RawResponse::Timeline(timeline)
+            }
+            Request::Login { ident, passwd } => {
+                self.session = Some(self.agent.login(ident, passwd).await?);
+                RawResponse::Login
+            }
+        };
+        Ok(res)
+    }
+
+    async fn get_session(&mut self) -> Option<Session> {
+        if let Some(session) = &self.session {
+            return Some(session.clone());
+        }
+        let Some(session) = self.session_store.get_session().await else {
+            return None;
+        };
+        if self.agent.resume_session(session.clone()).await.is_ok() {
+            self.session = Some(session.clone());
+            self.session.clone()
+        } else {
+            None
         }
     }
 
-    event!(Level::DEBUG, "stop handler: channel closed");
-    Ok(())
-}
-
-#[instrument(
-    name = "atp_handler",
-    err,
-    ret,
-    skip(agent, session),
-    fields(session = session.as_ref().map(|s| s.handle.as_str()))
-)]
-async fn handle_request(
-    request: Request,
-    agent: &AtpAgent<FileStore, ReqwestClient>,
-    session: &mut Option<Session>,
-) -> Result<RawResponse> {
-    let res = match request {
-        Request::GetSession => {
-            let session = session.clone();
-            RawResponse::Session(session)
-        }
-        Request::GetTimeline(params) => {
-            let timeline = agent.api.app.bsky.feed.get_timeline(params).await?;
-            RawResponse::Timeline(timeline)
-        }
-        Request::Login { ident, passwd } => {
-            *session = Some(agent.login(ident, passwd).await?);
-            RawResponse::Login
-        }
-    };
-    Ok(res)
+    fn handle<'a>(&'a self) -> Option<&'a str> {
+        self.session.as_ref().map(|s| s.handle.as_str())
+    }
 }
 
 fn convert_raw_response(response: Result<RawResponse>, request: Request) -> Response {
@@ -125,5 +125,22 @@ fn convert_raw_response(response: Result<RawResponse>, request: Request) -> Resp
             Request::GetTimeline(_) => Response::Timeline(Err(e)),
             Request::Login { .. } => Response::Login(Err(e)),
         },
+    }
+}
+
+impl fmt::Debug for Request {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Request::GetSession => f.write_str("GetSession"),
+            Request::GetTimeline(params) => f.debug_tuple("GetTimeline").field(&params).finish(),
+            Request::Login {
+                ident,
+                passwd: _passwd,
+            } => f
+                .debug_struct("Login")
+                .field("ident", &ident)
+                .field("passwd", &"***")
+                .finish(),
+        }
     }
 }

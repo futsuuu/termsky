@@ -58,11 +58,8 @@ struct Post {
 
 impl Widget for &Post {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let [top, content] = Layout::vertical([
-            Constraint::Length(3),
-            Constraint::Fill(1),
-        ])
-        .areas(area);
+        let [top, content] =
+            Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).areas(area);
         Paragraph::new({
             let mut spans = vec![self.name.as_str().bold()];
             if let Some(another_name) = &self.another_name {

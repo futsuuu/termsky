@@ -56,7 +56,7 @@ pub async fn start(
                     } else if key_event == KeyCode::Tab.into() {
                         login.switch_focus();
                         continue;
-                    } else if key_event == KeyCode::Enter.into() {
+                    } else if key_event == KeyCode::Enter.into() && login.textarea().is_some() {
                         atp_tx.send(atp::Request::Login {
                             ident: login.ident(),
                             passwd: login.passwd(),

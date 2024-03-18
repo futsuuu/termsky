@@ -6,7 +6,7 @@ mod view;
 mod widgets;
 
 use anyhow::Result;
-use tokio::{task, sync::mpsc};
+use tokio::sync::mpsc;
 
 fn main() -> Result<()> {
     utils::init()?;
@@ -22,18 +22,10 @@ async fn main_async() -> Result<()> {
     let (res_tx, res_rx) = mpsc::unbounded_channel();
     let (tui_tx, tui_rx) = mpsc::unbounded_channel();
     let (atp_tx, atp_rx) = mpsc::unbounded_channel();
-    let tui_task = task::spawn(tui::handler(tui_rx, res_tx.clone()));
-    let atp_task = task::spawn(atp::handler(atp_rx, res_tx));
 
-    tokio::try_join!(
-        app::start(res_rx, atp_tx, tui_tx),
-        flatten(tui_task),
-        flatten(atp_task),
-    )?;
+    let mut atp = atp::Atp::new(atp_rx, res_tx.clone())?;
+    let mut tui = tui::Tui::new(tui_rx, res_tx)?;
+    tokio::try_join!(atp.start(), tui.start(), app::start(res_rx, atp_tx, tui_tx))?;
 
     Ok(())
-}
-
-async fn flatten<T>(task: task::JoinHandle<Result<T>>) -> Result<T> {
-    Ok(task.await??)
 }

@@ -3,12 +3,15 @@ name = "termsky"
 version = "0.0.0"
 edition = "2021"
 
+[dependencies.tokio]
+version = "1"
+default-features = false
+features = ["fs", "macros", "rt-multi-thread", "sync", "time"]
+
 [dependencies]
 anyhow = "1.0"
-tokio = { version = "1", features = ["full"] }
-futures-util = "0.3"
 tracing = { version = "0.1", features = ["release_max_level_off", "max_level_trace"] }
-tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
 
 atrium-api = "0.18.6"
 atrium-xrpc-client = "0.5.0"
@@ -20,5 +23,6 @@ async-trait = "0.1"
 
 ratatui = "0.26.1"
 crossterm = { version = "0.27", features = ["event-stream"] }
+futures-util = { version = "0.3", default-features = false }
 tui-textarea = "0.4"
 scopeguard = "1.2"
