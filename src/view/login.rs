@@ -1,167 +1,98 @@
-use std::fmt;
+use ratatui::prelude::*;
 
-use ratatui::{prelude::*, widgets::*};
-use tui_textarea::TextArea;
-
-#[derive(Clone)]
-pub struct Login {
-    focus: Focus,
-    error: Option<String>,
-    block: bool,
-    ident: TextArea<'static>,
-    passwd: TextArea<'static>,
-}
-
-impl fmt::Debug for Login {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.debug_struct("Login")
-            .field("focus", &self.focus)
-            .field("error", &self.error)
-            .field("block", &self.block)
-            .field("ident", &self.ident.lines()[0])
-            .field("passwd", &"***")
-            .finish()
-    }
-}
+use crate::widgets::TextArea;
 
 #[derive(Clone, Debug)]
-enum Focus {
-    Ident,
-    Passwd,
-    None,
+pub struct Login {
+    textareas: [TextArea<'static>; 2],
+    focus: Option<usize>,
+    block_input: bool,
 }
 
 impl Login {
     pub fn new() -> Self {
         Self {
-            focus: Focus::Ident,
-            error: None,
-            block: true,
-            ident: create_textarea(false),
-            passwd: create_textarea(true),
+            textareas: [
+                TextArea::new(" Handle name or Email address ", false),
+                TextArea::new(" Password ", true),
+            ],
+            focus: None,
+            block_input: true,
         }
     }
 
-    pub fn get_ident(&self) -> String {
-        self.ident.lines()[0].to_string()
+    pub fn ident(&self) -> String {
+        self.textareas[0].lines()[0].to_string()
     }
-    pub fn get_passwd(&self) -> String {
-        self.passwd.lines()[0].to_string()
+    pub fn passwd(&self) -> String {
+        self.textareas[1].lines()[0].to_string()
     }
 
     pub fn textarea(&mut self) -> Option<&mut TextArea<'static>> {
-        if self.block {
+        if self.block_input {
             return None;
         }
-        match self.focus {
-            Focus::Ident => Some(&mut self.ident),
-            Focus::Passwd => Some(&mut self.passwd),
-            Focus::None => None,
-        }
+        self.focus.map(|n| &mut self.textareas[n])
     }
 
     pub fn switch_focus(&mut self) {
+        if self.block_input {
+            return;
+        }
+        if let Some(n) = self.focus {
+            self.textareas[n].lose_focus();
+        }
         self.focus = match self.focus {
-            Focus::Ident => Focus::Passwd,
-            Focus::Passwd => Focus::Ident,
-            Focus::None => Focus::Ident,
+            Some(1) => Some(0),
+            Some(0) => Some(1),
+            None => Some(0),
+            _ => unreachable!(),
         };
-    }
-    pub fn lose_focus(&mut self) {
-        self.focus = Focus::None;
-    }
-    pub fn has_focus(&self) -> bool {
-        !matches!(self.focus, Focus::None)
+        if let Some(n) = self.focus {
+            self.textareas[n].set_focus();
+        }
     }
 
-    pub fn set_error(&mut self, msg: String) {
-        self.error = Some(msg);
+    pub fn lose_focus(&mut self) {
+        if let Some(n) = self.focus {
+            self.textareas[n].lose_focus();
+        }
+        self.focus = None;
     }
-    pub fn unset_error(&mut self) {
-        self.error = None;
+
+    pub fn has_focus(&self) -> bool {
+        self.focus.is_some()
     }
 
     pub fn block_input(&mut self) {
-        self.block = true;
+        self.block_input = true;
         self.lose_focus();
     }
+
     pub fn unblock_input(&mut self) {
-        self.block = false;
+        self.block_input = false;
+        self.switch_focus();
     }
 }
 
 impl Widget for &Login {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let layout = Layout::vertical([
+        let [_, area, _] = Layout::horizontal([
+            Constraint::Percentage(30),
+            Constraint::Min(50),
+            Constraint::Percentage(30),
+        ])
+        .areas(area);
+        let [_, ident, passwd, _] = Layout::vertical([
             Constraint::Percentage(30),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Min(1),
         ])
         .spacing(1)
-        .split(
-            Layout::horizontal([
-                Constraint::Percentage(30),
-                Constraint::Min(50),
-                Constraint::Percentage(30),
-            ])
-            .split(area)[1],
-        );
+        .areas(area);
 
-        set_style(
-            self.ident.clone(),
-            " Handle name or Email address ",
-            matches!(self.focus, Focus::Ident),
-        )
-        .widget()
-        .render(layout[1], buf);
-
-        set_style(
-            self.passwd.clone(),
-            " Password ",
-            matches!(self.focus, Focus::Passwd),
-        )
-        .widget()
-        .render(layout[2], buf);
-
-        if let Some(err) = &self.error {
-            Paragraph::new(err.as_str())
-                .alignment(Alignment::Center)
-                .wrap(Wrap { trim: true })
-                .render(layout[3], buf);
-        }
+        self.textareas[0].widget().render(ident, buf);
+        self.textareas[1].widget().render(passwd, buf);
     }
-}
-
-fn create_textarea(mask: bool) -> TextArea<'static> {
-    let mut textarea = TextArea::default();
-    textarea.set_cursor_line_style(Style::default().not_underlined());
-    if mask {
-        textarea.set_mask_char('·');
-    }
-    textarea
-}
-
-fn set_style<'a>(textarea: TextArea<'a>, title: &'a str, focus: bool) -> TextArea<'a> {
-    let mut textarea = textarea;
-
-    let block = Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .border_type(BorderType::Rounded)
-        .padding(Padding::horizontal(1));
-    let block = if focus {
-        block.blue().bold()
-    } else {
-        block.dim()
-    };
-    textarea.set_block(block);
-
-    textarea.set_cursor_style(if focus {
-        Style::default().reversed()
-    } else {
-        Style::default().hidden()
-    });
-
-    textarea
 }

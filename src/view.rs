@@ -27,7 +27,7 @@ impl View {
 
     pub fn update<V: Into<View>>(&mut self, new: V) {
         *self = new.into();
-        event!(Level::INFO, "set view: {self:?}");
+        event!(Level::DEBUG, "set view: {self:?}");
     }
 }
 

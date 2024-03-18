@@ -3,6 +3,7 @@ mod atp;
 mod tui;
 mod utils;
 mod view;
+mod widgets;
 
 use anyhow::Result;
 use tokio::{task, sync::mpsc};

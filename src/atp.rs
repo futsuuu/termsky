@@ -1,16 +1,18 @@
-use std::{fmt, fs::File, path::PathBuf};
+mod session;
+
+use std::fmt;
 
 use anyhow::Result;
-use async_trait::async_trait;
 use atrium_api::{
     agent::{store::SessionStore, AtpAgent, Session},
     app::bsky,
 };
 use atrium_xrpc_client::reqwest::{ReqwestClient, ReqwestClientBuilder};
 use tokio::sync::mpsc;
-use tracing::instrument;
+use tracing::{event, instrument, Level};
 
 use crate::app;
+use session::FileStore;
 
 #[derive(Clone)]
 pub enum Request {
@@ -27,7 +29,11 @@ impl fmt::Debug for Request {
             Request::Login {
                 ident,
                 passwd: _passwd,
-            } => f.debug_struct("Login").field("ident", &ident).finish(),
+            } => f
+                .debug_struct("Login")
+                .field("ident", &ident)
+                .field("passwd", &"***")
+                .finish(),
         }
     }
 }
@@ -38,6 +44,7 @@ pub enum Response {
     Login(Result<()>),
 }
 
+#[derive(Debug)]
 enum RawResponse {
     Session(Option<Session>),
     Timeline(bsky::feed::get_timeline::Output),
@@ -49,9 +56,8 @@ pub async fn handler(
     tx: mpsc::UnboundedSender<app::Response>,
 ) -> Result<()> {
     const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
-    let client = reqwest::Client::builder().user_agent(USER_AGENT).build()?;
     let xrpc_client = ReqwestClientBuilder::new("https://bsky.social")
-        .client(client)
+        .client(reqwest::Client::builder().user_agent(USER_AGENT).build()?)
         .build();
     let session_store = FileStore::new()?;
     let agent = AtpAgent::new(xrpc_client, session_store.clone());
@@ -74,12 +80,14 @@ pub async fn handler(
         }
     }
 
+    event!(Level::DEBUG, "stop handler: channel closed");
     Ok(())
 }
 
 #[instrument(
-    name = "atp_request",
+    name = "atp_handler",
     err,
+    ret,
     skip(agent, session),
     fields(session = session.as_ref().map(|s| s.handle.as_str()))
 )]
@@ -107,64 +115,15 @@ async fn handle_request(
 
 fn convert_raw_response(response: Result<RawResponse>, request: Request) -> Response {
     match response {
-        Ok(RawResponse::Session(r)) => Response::Session(r),
-        Ok(RawResponse::Timeline(r)) => Response::Timeline(Ok(r)),
-        Ok(RawResponse::Login) => Response::Login(Ok(())),
+        Ok(res) => match res {
+            RawResponse::Session(r) => Response::Session(r),
+            RawResponse::Timeline(r) => Response::Timeline(Ok(r)),
+            RawResponse::Login => Response::Login(Ok(())),
+        },
         Err(e) => match request {
             Request::GetSession => unreachable!(),
             Request::GetTimeline(_) => Response::Timeline(Err(e)),
             Request::Login { .. } => Response::Login(Err(e)),
         },
-    }
-}
-
-#[derive(Clone, Debug)]
-struct FileStore(PathBuf);
-
-impl FileStore {
-    pub fn new() -> Result<Self> {
-        Ok(Self(crate::utils::local_data_dir()?.join("session.json")))
-    }
-
-    fn open_file(&self) -> Result<File> {
-        let file = File::options()
-            .read(true)
-            .write(true)
-            .create(true)
-            .open(&self.0)?;
-        Ok(file)
-    }
-
-    #[instrument(err)]
-    fn get(&self) -> Result<Session> {
-        let session = serde_json::from_reader(self.open_file()?)?;
-        Ok(session)
-    }
-
-    #[instrument(err, skip(session))]
-    fn set(&self, session: Session) -> Result<()> {
-        serde_json::to_writer(self.open_file()?, &session)?;
-        Ok(())
-    }
-
-    #[instrument(err)]
-    async fn clear(&self) -> Result<()> {
-        tokio::fs::remove_file(&self.0).await?;
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl SessionStore for FileStore {
-    async fn get_session(&self) -> Option<Session> {
-        self.get().ok()
-    }
-
-    async fn set_session(&self, session: Session) {
-        self.set(session).ok();
-    }
-
-    async fn clear_session(&self) {
-        self.clear().await.ok();
     }
 }

@@ -9,9 +9,11 @@ use crossterm::{
 use futures_util::{FutureExt, StreamExt};
 use ratatui::prelude::*;
 use tokio::sync::mpsc;
+use tracing::{event, Level};
 
 use crate::app;
 
+#[derive(Debug)]
 pub enum Request {
     GetEvent,
     Render(crate::view::View),
@@ -61,10 +63,12 @@ pub async fn handler(
         }
     }
 
+    event!(Level::DEBUG, "stop handler: channel closed");
     Ok(())
 }
 
 pub fn enter() -> Result<()> {
+    event!(Level::TRACE, "start rendering");
     terminal::enable_raw_mode()?;
     queue!(
         stdout(),
@@ -83,5 +87,6 @@ pub fn exit() -> Result<()> {
         tui_event::DisableMouseCapture,
         cursor::Show,
     )?;
+    event!(Level::TRACE, "finish rendering");
     Ok(())
 }

@@ -2,6 +2,7 @@ use anyhow::Result;
 use atrium_api::app::bsky;
 use crossterm::event::{Event as TuiEvent, KeyCode};
 use tokio::sync::mpsc;
+use tracing::{event, Level};
 
 use crate::{
     atp, tui,
@@ -30,8 +31,11 @@ pub async fn start(
 
     if session.is_some() {
         view.update(view::Home::new());
+    } else if let View::Login(ref mut login) = view {
+        login.unblock_input();
     }
 
+    event!(Level::INFO, "start main loop");
     loop {
         tui_tx.send(tui::Request::Render(view.clone()))?;
         tui_tx.send(tui::Request::GetEvent)?;
@@ -54,8 +58,8 @@ pub async fn start(
                         continue;
                     } else if key_event == KeyCode::Enter.into() {
                         atp_tx.send(atp::Request::Login {
-                            ident: login.get_ident(),
-                            passwd: login.get_passwd(),
+                            ident: login.ident(),
+                            passwd: login.passwd(),
                         })?;
                         login.block_input();
                         continue;
@@ -70,8 +74,7 @@ pub async fn start(
             }
 
             if let Response::Atp(atp::Response::Login(result)) = res {
-                if let Err(e) = result {
-                    login.set_error(e.to_string());
+                if let Err(_e) = result {
                     login.unblock_input();
                 } else {
                     view.update(view::Home::new());
@@ -110,5 +113,6 @@ pub async fn start(
         }
     }
 
+    event!(Level::INFO, "stop main loop");
     Ok(())
 }
