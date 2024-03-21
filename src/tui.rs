@@ -143,7 +143,7 @@ impl fmt::Debug for Response {
                         Key(_) => "Key",
                         Mouse(_) => "Mouse",
                         Paste(_) => "Paste",
-                        Resize(_, _) => "Paste",
+                        Resize(_, _) => "Resize",
                     }
                 )
             }
