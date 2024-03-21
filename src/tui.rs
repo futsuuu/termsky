@@ -42,20 +42,15 @@ impl Tui {
         req_rx: mpsc::UnboundedReceiver<Request>,
         res_tx: mpsc::UnboundedSender<app::Response>,
     ) -> Result<Self> {
-        let interval = time::interval(Duration::from_millis(250));
-        let events = EventStream::new();
-        let terminal = Arc::new(Mutex::new({
-            let backend = CrosstermBackend::new(stdout());
-            let mut terminal = Terminal::new(backend)?;
-            terminal.clear()?;
-            terminal
-        }));
+        let backend = CrosstermBackend::new(stdout());
+        let mut terminal = Terminal::new(backend)?;
+        terminal.clear()?;
         Ok(Self {
             req_rx,
             res_tx,
-            terminal,
-            interval,
-            events,
+            terminal: Arc::new(Mutex::new(terminal)),
+            interval: time::interval(Duration::from_millis(250)),
+            events: EventStream::new(),
         })
     }
 
@@ -72,7 +67,7 @@ impl Tui {
         Ok(())
     }
 
-    #[instrument(name = "tui", err(level = Level::WARN), ret(level = Level::TRACE), skip(self))]
+    #[instrument(name = "tui", skip(self), err(level = Level::WARN), ret(level = Level::TRACE))]
     async fn handle_request(&mut self, request: Request) -> Result<Option<Response>> {
         let res = match request {
             Request::GetEvent => tokio::select! {
