@@ -92,7 +92,7 @@ pub async fn start(
                     bsky::feed::get_timeline::Parameters {
                         algorithm: None,
                         cursor: None,
-                        limit: 1.try_into().ok(),
+                        limit: 20.try_into().ok(),
                     },
                 ))?;
                 home.wait_response();

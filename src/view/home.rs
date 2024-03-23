@@ -1,7 +1,7 @@
 use atrium_api::app::bsky::feed::defs::FeedViewPost;
 use ratatui::{prelude::*, widgets::*};
 
-use crate::widgets::{Post, Posts, PostsState};
+use crate::widgets::{Post, Posts};
 
 #[derive(Clone, Debug)]
 pub struct Home {
@@ -10,10 +10,6 @@ pub struct Home {
     post_cursor: Option<String>,
     /// true when waiting the response
     waiting: bool,
-}
-
-pub struct HomeState {
-    posts: PostsState,
 }
 
 impl Home {
@@ -31,12 +27,7 @@ impl Home {
 
     pub fn add_received_post(&mut self, post: FeedViewPost, new: bool) {
         self.waiting = false;
-        let post = Post::from(post);
-        if new {
-            self.posts.insert(0, post);
-        } else {
-            self.posts.push(post);
-        }
+        self.posts.add_post(Post::from(post), new);
     }
 
     pub fn new_posts_required(&self) -> bool {
@@ -44,10 +35,14 @@ impl Home {
     }
 }
 
-impl Widget for &Home {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        if let Some(post) = self.posts.get(0) {
-            post.render_ref(area, buf, &mut None);
-        }
+impl WidgetRef for Home {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        let [_, area, _] = Layout::horizontal([
+            Constraint::Fill(2),
+            Constraint::Fill(5),
+            Constraint::Fill(2),
+        ])
+        .areas(area);
+        self.posts.render_ref(area, buf);
     }
 }
