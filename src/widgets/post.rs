@@ -47,12 +47,17 @@ impl WidgetRef for Posts {
 
 #[derive(Clone, Debug)]
 pub struct Post {
-    /// display name or handle
+    author: Author,
+    content: String,
+    likes: u64,
+    replies: u64,
+    reposts: u64,
+}
+
+#[derive(Clone, Debug)]
+struct Author {
     name: String,
-    /// handle if display name not set
-    second_name: Option<String>,
-    /// post content
-    text: String,
+    opt: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -64,52 +69,76 @@ impl StatefulWidgetRef for Post {
     type State = PostState;
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let content = Paragraph::new(self.text.as_str()).wrap(Wrap { trim: false });
-        let header = Paragraph::new({
-            let mut spans = vec![self.name.as_str().bold()];
-            if let Some(second_name) = &self.second_name {
-                spans.append(&mut vec!["  ".into(), second_name.as_str().dim().italic()]);
-            }
-            Line::from(spans)
-        })
-        .block(Block::new().padding(Padding::vertical(1)));
+        let content = Paragraph::new(self.content.as_str()).wrap(Wrap { trim: false });
 
-        let [header_area, content_area] = if state.height == 0 {
+        let header_constraint = Constraint::Length(2);
+        let footer_constraint = Constraint::Length(3);
+        let [header_area, content_area, footer_area] = if state.height == 0 {
             let content_height = content.line_count(area.width) as u16;
-            let areas =
-                Layout::vertical([Constraint::Length(3), Constraint::Length(content_height)])
-                    .areas(area);
+            let areas = Layout::vertical([
+                header_constraint,
+                Constraint::Length(content_height),
+                footer_constraint,
+            ])
+            .areas(area);
             *state = PostState {
                 height: areas.iter().map(|a| a.height).sum(),
             };
             areas
         } else {
-            Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).areas(Rect {
-                height: state.height,
-                ..area
-            })
+            Layout::vertical([header_constraint, Constraint::Fill(1), footer_constraint]).areas(
+                Rect {
+                    height: state.height,
+                    ..area
+                },
+            )
         };
 
-        header.render(header_area, buf);
+        Paragraph::new({
+            let mut spans = vec![self.author.name.as_str().bold()];
+            if let Some(opt) = &self.author.opt {
+                spans.append(&mut vec!["  ".into(), opt.as_str().dim().italic()]);
+            }
+            Line::from(spans)
+        })
+        .block(Block::new().padding(Padding::bottom(1)))
+        .render(header_area, buf);
         content.render(content_area, buf);
+        Paragraph::new(format!(
+            " {}    {}   ♥ {}",
+            self.replies, self.reposts, self.likes
+        ))
+        .block(
+            Block::new()
+                .padding(Padding::top(1))
+                .borders(Borders::BOTTOM)
+                .border_style(Style::new().dim()),
+        )
+        .render(footer_area, buf);
     }
 }
 
 impl From<FeedViewPost> for Post {
     fn from(value: FeedViewPost) -> Self {
-        let author = &value.post.author;
-        let handle = format!("@{}", author.handle.as_str());
-        let (name, second_name) = match &author.display_name {
-            Some(display_name) => (display_name.clone(), Some(handle)),
-            None => (handle, None),
+        let post = &value.post;
+        let author = {
+            let author = &post.author;
+            let handle = format!("@{}", author.handle.as_str());
+            let (name, opt) = match &author.display_name {
+                Some(display_name) => (display_name.clone(), Some(handle)),
+                None => (handle, None),
+            };
+            Author { name, opt }
         };
         Self {
-            name,
-            second_name,
-            text: match &value.post.record {
+            author,
+            content: match &post.record {
                 Record::AppBskyFeedPost(rec) => rec.text.clone(),
                 _ => String::from("unimplemented!"),
             },
+            likes: post.like_count.unwrap_or(0) as u64,
+            replies: post.reply_count.unwrap_or(0) as u64,
+            reposts: post.repost_count.unwrap_or(0) as u64,
         }
     }
 }
