@@ -1,7 +1,7 @@
 use atrium_api::app::bsky::feed::defs::FeedViewPost;
 use ratatui::{prelude::*, widgets::*};
 
-use crate::widgets::{Post, Posts};
+use crate::widgets::Posts;
 
 #[derive(Clone, Debug)]
 pub struct Home {
@@ -27,7 +27,7 @@ impl Home {
 
     pub fn add_received_post(&mut self, post: FeedViewPost, new: bool) {
         self.waiting = false;
-        self.posts.add_post(Post::from(post), new);
+        self.posts.add_post(post, new);
     }
 
     pub fn new_posts_required(&self) -> bool {

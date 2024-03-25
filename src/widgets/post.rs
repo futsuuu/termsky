@@ -17,7 +17,8 @@ impl Posts {
         }
     }
 
-    pub fn add_post(&mut self, post: Post, new: bool) {
+    pub fn add_post(&mut self, post: FeedViewPost, new: bool) {
+        let post = post.into();
         let post_state = Arc::new(Mutex::new(PostState { height: 0 }));
         if new {
             self.posts.insert(0, (post, post_state));
@@ -46,7 +47,7 @@ impl WidgetRef for Posts {
 }
 
 #[derive(Clone, Debug)]
-pub struct Post {
+struct Post {
     author: Author,
     content: String,
     likes: u64,
@@ -60,8 +61,8 @@ struct Author {
     opt: Option<String>,
 }
 
-#[derive(Clone, Debug)]
-pub struct PostState {
+#[derive(Debug)]
+struct PostState {
     height: u16,
 }
 
@@ -69,12 +70,11 @@ impl StatefulWidgetRef for Post {
     type State = PostState;
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let content = Paragraph::new(self.content.as_str()).wrap(Wrap { trim: false });
-
+        let wrapped_content = textwrap::wrap(self.content.as_str(), area.width as usize);
         let header_constraint = Constraint::Length(2);
         let footer_constraint = Constraint::Length(3);
-        let [header_area, content_area, footer_area] = if state.height == 0 {
-            let content_height = content.line_count(area.width) as u16;
+        let [header_area, content_area, footer_area] = {
+            let content_height = wrapped_content.len() as u16;
             let areas = Layout::vertical([
                 header_constraint,
                 Constraint::Length(content_height),
@@ -85,13 +85,6 @@ impl StatefulWidgetRef for Post {
                 height: areas.iter().map(|a| a.height).sum(),
             };
             areas
-        } else {
-            Layout::vertical([header_constraint, Constraint::Fill(1), footer_constraint]).areas(
-                Rect {
-                    height: state.height,
-                    ..area
-                },
-            )
         };
 
         Paragraph::new({
@@ -103,7 +96,14 @@ impl StatefulWidgetRef for Post {
         })
         .block(Block::new().padding(Padding::bottom(1)))
         .render(header_area, buf);
-        content.render(content_area, buf);
+        Paragraph::new(
+            wrapped_content
+                .iter()
+                .map(|s| s.to_string())
+                .map(Line::from)
+                .collect::<Vec<_>>(),
+        )
+        .render(content_area, buf);
         Paragraph::new(format!(
             " {}    {}   ♥ {}",
             self.replies, self.reposts, self.likes
