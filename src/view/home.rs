@@ -6,7 +6,7 @@ use crate::widgets::Posts;
 #[derive(Clone, Debug)]
 pub struct Home {
     posts: Posts,
-    /// Used to get new posts
+    /// Used to get old posts
     post_cursor: Option<String>,
     /// true when waiting the response
     waiting: bool,
