@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use atrium_api::{
-    app::bsky::feed::defs::{FeedViewPost, FeedViewPostReasonEnum},
+    app::bsky::{self, actor::defs::ProfileViewBasic, feed::defs::FeedViewPost},
     records::Record,
 };
 use ratatui::{prelude::*, widgets::*};
@@ -70,22 +70,6 @@ struct PostState {
     height: u16,
 }
 
-impl Account {
-    fn new(display_name: Option<String>, handle: &atrium_api::types::string::Handle) -> Self {
-        let handle = format!("@{}", handle.as_str());
-        match display_name {
-            Some(display_name) => Self {
-                name: display_name,
-                opt_name: Some(handle),
-            },
-            None => Self {
-                name: handle,
-                opt_name: None,
-            },
-        }
-    }
-}
-
 impl StatefulWidgetRef for Post {
     type State = PostState;
 
@@ -107,7 +91,7 @@ impl StatefulWidgetRef for Post {
         };
 
         if let Some(reposted_by) = &self.reposted_by {
-            Paragraph::new(format!("  Reposted by {}", reposted_by.name))
+            Span::from(format!("  Reposted by {}", reposted_by.name))
                 .render(repost_info_area, buf);
         }
         Paragraph::new({
@@ -145,10 +129,7 @@ impl From<FeedViewPost> for Post {
     fn from(value: FeedViewPost) -> Self {
         let post = &value.post;
         Self {
-            author: {
-                let author = &post.author;
-                Account::new(author.display_name.clone(), &author.handle)
-            },
+            author: post.author.clone().into(),
             content: match &post.record {
                 Record::AppBskyFeedPost(rec) => rec.text.clone(),
                 _ => String::from("unimplemented!"),
@@ -157,10 +138,24 @@ impl From<FeedViewPost> for Post {
             replies: post.reply_count.unwrap_or(0) as u64,
             reposts: post.repost_count.unwrap_or(0) as u64,
             reposted_by: value.reason.map(|r| match r {
-                FeedViewPostReasonEnum::ReasonRepost(repost) => {
-                    Account::new(repost.by.display_name, &repost.by.handle)
-                }
+                bsky::feed::defs::FeedViewPostReasonEnum::ReasonRepost(repost) => repost.by.into(),
             }),
+        }
+    }
+}
+
+impl From<ProfileViewBasic> for Account {
+    fn from(value: ProfileViewBasic) -> Self {
+        let handle = format!("@{}", value.handle.as_str());
+        match value.display_name {
+            Some(display_name) => Self {
+                name: display_name,
+                opt_name: Some(handle),
+            },
+            None => Self {
+                name: handle,
+                opt_name: None,
+            },
         }
     }
 }
