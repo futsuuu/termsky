@@ -21,7 +21,9 @@ impl LazyBuffer<'_> {
     pub fn rendered_area(&self) -> Rect {
         self.widgets
             .iter()
-            .fold(Rect::default(), |r, (area, _)| r.union(*area))
+            .map(|(area, _widget)| *area)
+            .reduce(|acc, area| acc.union(area))
+            .unwrap_or_default()
     }
 }
 

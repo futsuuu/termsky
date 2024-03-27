@@ -3,6 +3,7 @@ use atrium_api::{
     records::Record,
 };
 use ratatui::{prelude::*, widgets::*};
+use textwrap::wrap;
 
 use super::{LazyBuffer, LazyWidget};
 
@@ -61,12 +62,25 @@ struct Post {
     replies: u64,
     reposts: u64,
     reposted_by: Option<Account>,
+    embed: Option<Embed>,
 }
 
 #[derive(Clone, Debug)]
 struct Account {
     name: String,
     opt_name: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+enum Embed {
+    External(bsky::embed::external::ViewExternal),
+    Image(Vec<EmbedImage>),
+    Unimplemented,
+}
+
+#[derive(Clone, Debug)]
+struct EmbedImage {
+    alt: String,
 }
 
 impl From<FeedViewPost> for Post {
@@ -84,6 +98,7 @@ impl From<FeedViewPost> for Post {
             reposted_by: value.reason.map(|r| match r {
                 bsky::feed::defs::FeedViewPostReasonEnum::ReasonRepost(repost) => repost.by.into(),
             }),
+            embed: post.embed.clone().map(Into::into),
         }
     }
 }
@@ -104,19 +119,46 @@ impl From<bsky::actor::defs::ProfileViewBasic> for Account {
     }
 }
 
+impl From<bsky::feed::defs::PostViewEmbedEnum> for Embed {
+    fn from(value: bsky::feed::defs::PostViewEmbedEnum) -> Self {
+        use bsky::feed::defs::PostViewEmbedEnum::*;
+        match value {
+            AppBskyEmbedExternalView(view) => Self::External(view.external),
+            AppBskyEmbedImagesView(view) => Self::Image(
+                view.images
+                    .into_iter()
+                    .map(|image| EmbedImage { alt: image.alt })
+                    .collect::<Vec<_>>(),
+            ),
+            _ => Self::Unimplemented,
+        }
+    }
+}
+
 impl<'a> LazyWidget<'a> for &'a Post {
     fn render_lazy(self, area: Rect, buf: &mut LazyBuffer<'a>) {
-        let wrapped_content = textwrap::wrap(self.content.as_str(), area.width as usize);
-        let [repost_info_area, header_area, content_area, footer_area] = Layout::vertical([
-            Constraint::Length(if self.reposted_by.is_some() { 1 } else { 0 }),
-            Constraint::Length(2),
-            Constraint::Length(wrapped_content.len() as u16),
-            Constraint::Length(3),
-        ])
-        .areas(Rect {
-            height: u16::MAX,
-            ..area
-        });
+        let wrapped_content = wrap(self.content.as_str(), area.width as usize);
+        let embed_height = self
+            .embed
+            .as_ref()
+            .map(|e| {
+                let mut vbuf = LazyBuffer::new();
+                e.render_lazy(area, &mut vbuf);
+                vbuf.rendered_area().height
+            })
+            .unwrap_or_default();
+        let [repost_info_area, header_area, content_area, embed_area, footer_area] =
+            Layout::vertical([
+                Constraint::Length(if self.reposted_by.is_some() { 1 } else { 0 }),
+                Constraint::Length(2),
+                Constraint::Length(wrapped_content.len() as u16),
+                Constraint::Length(embed_height),
+                Constraint::Length(3),
+            ])
+            .areas(Rect {
+                height: u16::MAX,
+                ..area
+            });
 
         if let Some(reposted_by) = &self.reposted_by {
             Span::from(format!("  Reposted by {}", reposted_by.name))
@@ -139,6 +181,9 @@ impl<'a> LazyWidget<'a> for &'a Post {
                 .collect::<Vec<_>>(),
         )
         .render_lazy(content_area, buf);
+        if let Some(embed) = &self.embed {
+            embed.render_lazy(embed_area, buf);
+        }
         Paragraph::new(format!(
             " {}    {}   ♥ {}",
             self.replies, self.reposts, self.likes
@@ -150,5 +195,70 @@ impl<'a> LazyWidget<'a> for &'a Post {
                 .border_style(Style::new().blue().dim()),
         )
         .render_lazy(footer_area, buf);
+    }
+}
+
+impl<'a> LazyWidget<'a> for &'a Embed {
+    fn render_lazy(self, area: Rect, buf: &mut LazyBuffer<'a>) {
+        match self {
+            Embed::External(external) => {
+                let block = Block::bordered()
+                    .border_type(BorderType::Rounded)
+                    .border_style(Style::new().dim())
+                    .padding(Padding::horizontal(1));
+
+                let width = block.inner(area).width as usize;
+                let title = wrap(&external.title, width)
+                    .iter()
+                    .take(3)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| Line::from(s.to_string()))
+                    .map(|l| l.centered().style(Style::new().bold()))
+                    .collect::<Vec<_>>();
+                let desc = wrap(&external.description, width)
+                    .iter()
+                    .take(3)
+                    .filter(|s| !s.is_empty())
+                    .map(|s| Line::from(s.to_string()))
+                    .collect::<Vec<_>>();
+                let sep = if title.is_empty() || desc.is_empty() {
+                    None
+                } else {
+                    let title_width = title.iter().map(Line::width).max().unwrap_or_default();
+                    Some(Line::from("▔".repeat(title_width)).centered())
+                };
+                let mut lines = Vec::new();
+                lines.extend(title);
+                if let Some(sep) = sep {
+                    lines.push(sep);
+                }
+                lines.extend(desc);
+                lines.push(Line::from(""));
+                lines.push(Line::from(external.uri.as_str()).style(Style::new().dim()));
+
+                let height = lines.len() as u16 + 2; // inner + border
+                Paragraph::new(lines)
+                    .block(block)
+                    .render_lazy(Rect { height, ..area }, buf);
+            }
+
+            Embed::Image(images) => {
+                let layouts = Layout::vertical(
+                    images
+                        .iter()
+                        .map(|_| Constraint::Length(1))
+                        .collect::<Vec<_>>()
+                        .as_slice(),
+                )
+                .split(area);
+                for (_image, layout) in images.iter().zip(layouts.iter()) {
+                    Span::from(" ").render_lazy(*layout, buf);
+                }
+            }
+
+            Embed::Unimplemented => {
+                Span::from(format!("unimplemented!")).render_lazy(Rect { height: 1, ..area }, buf);
+            }
+        }
     }
 }
