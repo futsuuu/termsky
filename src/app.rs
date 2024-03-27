@@ -20,20 +20,8 @@ pub async fn start(
     tui_tx: mpsc::UnboundedSender<tui::Request>,
 ) -> Result<()> {
     let mut view = View::Login(view::Login::new());
-    tui_tx.send(tui::Request::Render(view.clone()))?;
 
     atp_tx.send(atp::Request::GetSession)?;
-    let session = loop {
-        if let Response::Atp(atp::Response::Session(session)) = res_rx.recv().await.unwrap() {
-            break session;
-        }
-    };
-
-    if session.is_some() {
-        view.update(view::Home::new());
-    } else if let View::Login(ref mut login) = view {
-        login.unblock_input();
-    }
 
     event!(Level::INFO, "start main loop");
     loop {
@@ -68,6 +56,16 @@ pub async fn start(
 
                 if let Some(ref mut textarea) = login.textarea() {
                     textarea.input(tui_textarea::Input::from(tui_event));
+                }
+
+                continue;
+            }
+
+            if let Response::Atp(atp::Response::Session(ref session)) = res {
+                if session.is_none() {
+                    login.unblock_input();
+                } else {
+                    view.update(view::Home::new());
                 }
 
                 continue;

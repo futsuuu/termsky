@@ -1,5 +1,5 @@
 use atrium_api::{
-    app::bsky::{self, actor::defs::ProfileViewBasic, feed::defs::FeedViewPost},
+    app::bsky::{self, feed::defs::FeedViewPost},
     records::Record,
 };
 use ratatui::{prelude::*, widgets::*};
@@ -47,7 +47,7 @@ impl WidgetRef for Posts {
             if space.height == 0 {
                 break;
             }
-            post.clone().render_lazy(space, &mut lbuf);
+            post.render_lazy(space, &mut lbuf);
         }
         lbuf.render_ref(area, buf);
     }
@@ -69,8 +69,43 @@ struct Account {
     opt_name: Option<String>,
 }
 
-impl LazyWidget<'_> for Post {
-    fn render_lazy(self, area: Rect, buf: &mut LazyBuffer<'_>) {
+impl From<FeedViewPost> for Post {
+    fn from(value: FeedViewPost) -> Self {
+        let post = &value.post;
+        Self {
+            author: post.author.clone().into(),
+            content: match &post.record {
+                Record::AppBskyFeedPost(rec) => rec.text.clone(),
+                _ => String::from("unimplemented!"),
+            },
+            likes: post.like_count.unwrap_or(0) as u64,
+            replies: post.reply_count.unwrap_or(0) as u64,
+            reposts: post.repost_count.unwrap_or(0) as u64,
+            reposted_by: value.reason.map(|r| match r {
+                bsky::feed::defs::FeedViewPostReasonEnum::ReasonRepost(repost) => repost.by.into(),
+            }),
+        }
+    }
+}
+
+impl From<bsky::actor::defs::ProfileViewBasic> for Account {
+    fn from(value: bsky::actor::defs::ProfileViewBasic) -> Self {
+        let handle = format!("@{}", value.handle.as_str());
+        match value.display_name {
+            Some(display_name) => Self {
+                name: display_name,
+                opt_name: Some(handle),
+            },
+            None => Self {
+                name: handle,
+                opt_name: None,
+            },
+        }
+    }
+}
+
+impl<'a> LazyWidget<'a> for &'a Post {
+    fn render_lazy(self, area: Rect, buf: &mut LazyBuffer<'a>) {
         let wrapped_content = textwrap::wrap(self.content.as_str(), area.width as usize);
         let [repost_info_area, header_area, content_area, footer_area] = Layout::vertical([
             Constraint::Length(if self.reposted_by.is_some() { 1 } else { 0 }),
@@ -115,40 +150,5 @@ impl LazyWidget<'_> for Post {
                 .border_style(Style::new().blue().dim()),
         )
         .render_lazy(footer_area, buf);
-    }
-}
-
-impl From<FeedViewPost> for Post {
-    fn from(value: FeedViewPost) -> Self {
-        let post = &value.post;
-        Self {
-            author: post.author.clone().into(),
-            content: match &post.record {
-                Record::AppBskyFeedPost(rec) => rec.text.clone(),
-                _ => String::from("unimplemented!"),
-            },
-            likes: post.like_count.unwrap_or(0) as u64,
-            replies: post.reply_count.unwrap_or(0) as u64,
-            reposts: post.repost_count.unwrap_or(0) as u64,
-            reposted_by: value.reason.map(|r| match r {
-                bsky::feed::defs::FeedViewPostReasonEnum::ReasonRepost(repost) => repost.by.into(),
-            }),
-        }
-    }
-}
-
-impl From<ProfileViewBasic> for Account {
-    fn from(value: ProfileViewBasic) -> Self {
-        let handle = format!("@{}", value.handle.as_str());
-        match value.display_name {
-            Some(display_name) => Self {
-                name: display_name,
-                opt_name: Some(handle),
-            },
-            None => Self {
-                name: handle,
-                opt_name: None,
-            },
-        }
     }
 }

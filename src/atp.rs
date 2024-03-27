@@ -27,7 +27,6 @@ pub enum Response {
     Login(Result<()>),
 }
 
-#[derive(Debug)]
 enum RawResponse {
     Session(Box<Option<Session>>),
     Timeline(bsky::feed::get_timeline::Output),
@@ -137,5 +136,15 @@ impl fmt::Debug for Request {
                 .field("passwd", &"***")
                 .finish(),
         }
+    }
+}
+
+impl fmt::Debug for RawResponse {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::Session(_) => "Session",
+            Self::Timeline(_) => "Timeline",
+            Self::Login => "Login",
+        })
     }
 }

@@ -1,5 +1,4 @@
 use std::{
-    fmt,
     io::{stdout, Stdout},
     sync::{Arc, Mutex},
     time::Duration,
@@ -67,7 +66,7 @@ impl Tui {
         Ok(())
     }
 
-    #[instrument(name = "tui", skip(self), err(level = Level::WARN), ret(level = Level::TRACE))]
+    #[instrument(name = "tui", skip(self), err(level = Level::WARN))]
     async fn handle_request(&mut self, request: Request) -> Result<Option<Response>> {
         let res = match request {
             Request::GetEvent => tokio::select! {
@@ -126,27 +125,4 @@ pub fn exit() -> Result<()> {
     )?;
     event!(Level::TRACE, "finish rendering");
     Ok(())
-}
-
-impl fmt::Debug for Response {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Self::Tick => f.write_str("Tick"),
-            Self::Event(e) => {
-                use tui_event::Event::*;
-                write!(
-                    f,
-                    "Event({})",
-                    match e {
-                        FocusGained => "FocusGained",
-                        FocusLost => "FocusLost",
-                        Key(_) => "Key",
-                        Mouse(_) => "Mouse",
-                        Paste(_) => "Paste",
-                        Resize(_, _) => "Resize",
-                    }
-                )
-            }
-        }
-    }
 }

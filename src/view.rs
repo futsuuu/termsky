@@ -1,13 +1,15 @@
 mod home;
 mod login;
 
+use std::fmt;
+
 use ratatui::terminal::Frame;
 use tracing::{event, Level};
 
 pub use home::Home;
 pub use login::Login;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum View {
     Login(Login),
     Home(Home),
@@ -40,5 +42,14 @@ impl From<Login> for View {
 impl From<Home> for View {
     fn from(value: Home) -> Self {
         Self::Home(value)
+    }
+}
+
+impl fmt::Debug for View {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(match self {
+            Self::Login(_) => "Login",
+            Self::Home(_) => "Home",
+        })
     }
 }
