@@ -1,14 +1,14 @@
-use std::sync::{Arc, Mutex};
-
 use atrium_api::{
     app::bsky::{self, actor::defs::ProfileViewBasic, feed::defs::FeedViewPost},
     records::Record,
 };
 use ratatui::{prelude::*, widgets::*};
 
+use super::{LazyBuffer, LazyWidget};
+
 #[derive(Clone, Debug)]
 pub struct Posts {
-    posts: Vec<(Post, Arc<Mutex<PostState>>)>,
+    posts: Vec<Post>,
     scrolled_posts: usize,
 }
 
@@ -22,11 +22,10 @@ impl Posts {
 
     pub fn add_post(&mut self, post: FeedViewPost, new: bool) {
         let post = post.into();
-        let post_state = Arc::new(Mutex::new(PostState { height: 0 }));
         if new {
-            self.posts.insert(0, (post, post_state));
+            self.posts.insert(0, post);
         } else {
-            self.posts.push((post, post_state));
+            self.posts.push(post);
         }
     }
 
@@ -36,16 +35,21 @@ impl Posts {
 }
 
 impl WidgetRef for Posts {
-    fn render_ref(&self, mut area: Rect, buf: &mut Buffer) {
-        for (post, post_state) in self.posts.iter().skip(self.scrolled_posts) {
-            let mut post_state = post_state.lock().unwrap();
-            post.render_ref(area, buf, &mut post_state);
-            area.y += post_state.height;
-            area.height = area.height.saturating_sub(post_state.height);
-            if area.height == 0 {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        let mut lbuf = LazyBuffer::new();
+        for post in self.posts.iter().skip(self.scrolled_posts) {
+            let rendered = lbuf.rendered_area();
+            let space = Rect {
+                y: area.y + rendered.height,
+                height: area.height.saturating_sub(rendered.height),
+                ..area
+            };
+            if space.height == 0 {
                 break;
             }
+            post.clone().render_lazy(space, &mut lbuf);
         }
+        lbuf.render_ref(area, buf);
     }
 }
 
@@ -65,44 +69,33 @@ struct Account {
     opt_name: Option<String>,
 }
 
-#[derive(Debug)]
-struct PostState {
-    height: u16,
-}
-
-impl StatefulWidgetRef for Post {
-    type State = PostState;
-
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+impl LazyWidget<'_> for Post {
+    fn render_lazy(self, area: Rect, buf: &mut LazyBuffer<'_>) {
         let wrapped_content = textwrap::wrap(self.content.as_str(), area.width as usize);
-        let [repost_info_area, header_area, content_area, footer_area] = {
-            let content_height = wrapped_content.len() as u16;
-            let areas = Layout::vertical([
-                Constraint::Length(if self.reposted_by.is_some() { 1 } else { 0 }),
-                Constraint::Length(2),
-                Constraint::Length(content_height),
-                Constraint::Length(3),
-            ])
-            .areas(area);
-            *state = PostState {
-                height: areas.iter().map(|a| a.height).sum(),
-            };
-            areas
-        };
+        let [repost_info_area, header_area, content_area, footer_area] = Layout::vertical([
+            Constraint::Length(if self.reposted_by.is_some() { 1 } else { 0 }),
+            Constraint::Length(2),
+            Constraint::Length(wrapped_content.len() as u16),
+            Constraint::Length(3),
+        ])
+        .areas(Rect {
+            height: u16::MAX,
+            ..area
+        });
 
         if let Some(reposted_by) = &self.reposted_by {
             Span::from(format!("  Reposted by {}", reposted_by.name))
-                .render(repost_info_area, buf);
+                .render_lazy(repost_info_area, buf);
         }
         Paragraph::new({
-            let mut spans = vec![self.author.name.as_str().bold()];
+            let mut spans = vec![self.author.name.clone().bold()];
             if let Some(opt_name) = &self.author.opt_name {
-                spans.append(&mut vec!["  ".into(), opt_name.as_str().dim().italic()]);
+                spans.append(&mut vec!["  ".into(), opt_name.clone().dim().italic()]);
             }
             Line::from(spans)
         })
         .block(Block::new().padding(Padding::bottom(1)))
-        .render(header_area, buf);
+        .render_lazy(header_area, buf);
         Paragraph::new(
             wrapped_content
                 .iter()
@@ -110,7 +103,7 @@ impl StatefulWidgetRef for Post {
                 .map(Line::from)
                 .collect::<Vec<_>>(),
         )
-        .render(content_area, buf);
+        .render_lazy(content_area, buf);
         Paragraph::new(format!(
             " {}    {}   ♥ {}",
             self.replies, self.reposts, self.likes
@@ -121,7 +114,7 @@ impl StatefulWidgetRef for Post {
                 .borders(Borders::BOTTOM)
                 .border_style(Style::new().blue().dim()),
         )
-        .render(footer_area, buf);
+        .render_lazy(footer_area, buf);
     }
 }
 
