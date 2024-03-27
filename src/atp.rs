@@ -22,14 +22,14 @@ pub enum Request {
 }
 
 pub enum Response {
-    Session(Option<Session>),
+    Session(Box<Option<Session>>),
     Timeline(Result<bsky::feed::get_timeline::Output>),
     Login(Result<()>),
 }
 
 #[derive(Debug)]
 enum RawResponse {
-    Session(Option<Session>),
+    Session(Box<Option<Session>>),
     Timeline(bsky::feed::get_timeline::Output),
     Login,
 }
@@ -79,7 +79,7 @@ impl Atp {
         let res = match request {
             Request::GetSession => {
                 let session = self.get_session().await;
-                RawResponse::Session(session)
+                RawResponse::Session(Box::new(session))
             }
             Request::GetTimeline(params) => {
                 let timeline = self.agent.api.app.bsky.feed.get_timeline(params).await?;
@@ -97,18 +97,13 @@ impl Atp {
         if let Some(session) = &self.session {
             return Some(session.clone());
         }
-        let Some(session) = self.session_store.get_session().await else {
-            return None;
-        };
-        if self.agent.resume_session(session.clone()).await.is_ok() {
-            self.session = Some(session.clone());
-            self.session.clone()
-        } else {
-            None
-        }
+        let session = self.session_store.get_session().await?;
+        self.agent.resume_session(session.clone()).await.ok()?;
+        self.session = Some(session.clone());
+        self.session.clone()
     }
 
-    fn handle<'a>(&'a self) -> Option<&'a str> {
+    fn handle(&self) -> Option<&str> {
         self.session.as_ref().map(|s| s.handle.as_str())
     }
 }

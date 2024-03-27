@@ -40,7 +40,7 @@ impl<'a> Wrapper<'a> {
     }
 }
 
-fn block<'a>(title: &'a str) -> Block<'a> {
+fn block(title: &str) -> Block<'_> {
     Block::bordered()
         .title(title)
         .border_type(BorderType::Rounded)

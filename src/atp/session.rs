@@ -19,6 +19,7 @@ impl FileStore {
             .read(true)
             .write(true)
             .create(true)
+            .truncate(false)
             .open(&self.0)
             .await?;
         Ok(file.into_std().await)

@@ -9,6 +9,12 @@ pub struct Login {
     block_input: bool,
 }
 
+impl Default for Login {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Login {
     pub fn new() -> Self {
         Self {
