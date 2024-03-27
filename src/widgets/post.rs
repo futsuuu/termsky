@@ -1,6 +1,7 @@
 use atrium_api::{
     app::bsky::{self, feed::defs::FeedViewPost},
-    records::Record,
+    records,
+    types::Union,
 };
 use ratatui::{prelude::*, widgets::*};
 use textwrap::wrap;
@@ -89,16 +90,24 @@ impl From<FeedViewPost> for Post {
         Self {
             author: post.author.clone().into(),
             content: match &post.record {
-                Record::AppBskyFeedPost(rec) => rec.text.clone(),
+                records::Record::Known(records::KnownRecord::AppBskyFeedPost(rec)) => {
+                    rec.text.clone()
+                }
                 _ => String::from("unimplemented!"),
             },
             likes: post.like_count.unwrap_or(0) as u64,
             replies: post.reply_count.unwrap_or(0) as u64,
             reposts: post.repost_count.unwrap_or(0) as u64,
-            reposted_by: value.reason.map(|r| match r {
-                bsky::feed::defs::FeedViewPostReasonEnum::ReasonRepost(repost) => repost.by.into(),
-            }),
-            embed: post.embed.clone().map(Into::into),
+            reposted_by: match value.reason {
+                Some(Union::Refs(bsky::feed::defs::FeedViewPostReasonRefs::ReasonRepost(
+                    repost,
+                ))) => Some(repost.by.into()),
+                _ => None,
+            },
+            embed: match post.embed.clone() {
+                Some(Union::Refs(embed)) => Some(embed.into()),
+                _ => None,
+            },
         }
     }
 }
@@ -119,9 +128,9 @@ impl From<bsky::actor::defs::ProfileViewBasic> for Account {
     }
 }
 
-impl From<bsky::feed::defs::PostViewEmbedEnum> for Embed {
-    fn from(value: bsky::feed::defs::PostViewEmbedEnum) -> Self {
-        use bsky::feed::defs::PostViewEmbedEnum::*;
+impl From<bsky::feed::defs::PostViewEmbedRefs> for Embed {
+    fn from(value: bsky::feed::defs::PostViewEmbedRefs) -> Self {
+        use bsky::feed::defs::PostViewEmbedRefs::*;
         match value {
             AppBskyEmbedExternalView(view) => Self::External(view.external),
             AppBskyEmbedImagesView(view) => Self::Image(
