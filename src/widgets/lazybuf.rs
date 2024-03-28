@@ -28,12 +28,18 @@ impl LazyBuffer<'_> {
 }
 
 impl WidgetRef for LazyBuffer<'_> {
-    fn render_ref(&self, _area: Rect, buf: &mut Buffer) {
-        let mut vbuf = Buffer::empty(self.rendered_area());
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        let rendered_area = self.rendered_area();
+        let mut vbuf = Buffer::empty(rendered_area);
         for (widget_area, widget) in &self.widgets {
             widget.render_ref(*widget_area, &mut vbuf);
         }
-        buf.merge(&vbuf);
+        let area = area.intersection(buf.area).intersection(rendered_area);
+        for x in area.left()..area.right() {
+            for y in area.top()..area.bottom() {
+                *buf.get_mut(x, y) = vbuf.get(x, y).clone();
+            }
+        }
     }
 }
 

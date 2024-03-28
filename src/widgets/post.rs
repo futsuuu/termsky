@@ -11,7 +11,7 @@ use super::{LazyBuffer, LazyWidget};
 #[derive(Clone, Debug)]
 pub struct Posts {
     posts: Vec<Post>,
-    scrolled_posts: usize,
+    pub scrolled_posts: usize,
 }
 
 impl Posts {

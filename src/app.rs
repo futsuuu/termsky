@@ -1,6 +1,6 @@
 use anyhow::Result;
 use atrium_api::app::bsky;
-use crossterm::event::{Event as TuiEvent, KeyCode};
+use crossterm::event::{Event as TuiEvent, KeyCode, KeyEventKind};
 use tokio::sync::mpsc;
 use tracing::{event, Level};
 
@@ -96,9 +96,17 @@ pub async fn start(
                 home.wait_response();
             }
 
-            if let Response::Tui(tui::Response::Event(tui_event)) = res {
-                if tui_event == TuiEvent::Key(KeyCode::Esc.into()) {
+            if let Response::Tui(tui::Response::Event(TuiEvent::Key(key_event))) = res {
+                if key_event.code == KeyCode::Esc {
                     break;
+                } else if key_event.kind == KeyEventKind::Release {
+                    continue;
+                }
+                if key_event.code == KeyCode::Char('k') {
+                    home.scroll_up();
+                }
+                if key_event.code == KeyCode::Char('j') {
+                    home.scroll_down();
                 }
                 continue;
             }

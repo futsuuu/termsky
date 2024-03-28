@@ -33,6 +33,14 @@ impl Home {
     pub fn new_posts_required(&self) -> bool {
         self.posts.is_empty() && !self.waiting
     }
+
+    pub fn scroll_up(&mut self) {
+        self.posts.scrolled_posts = self.posts.scrolled_posts.saturating_sub(1);
+    }
+
+    pub fn scroll_down(&mut self) {
+        self.posts.scrolled_posts += 1;
+    }
 }
 
 impl WidgetRef for Home {
