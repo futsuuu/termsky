@@ -1,39 +1,38 @@
 use anyhow::Result;
 use atrium_api::app::bsky;
-use crossterm::event::{Event as TuiEvent, KeyCode, KeyEventKind};
-use tokio::sync::mpsc;
+use crossterm::event::{KeyCode, KeyEventKind};
 use tracing::{event, Level};
+use tui_textarea::Input;
 
 use crate::{
     atp, tui,
     view::{self, View},
 };
 
-pub enum Response {
+pub enum Event {
     Atp(atp::Response),
-    Tui(tui::Response),
+    Tui(tui::Event),
 }
 
-pub async fn start(
-    mut res_rx: mpsc::UnboundedReceiver<Response>,
-    atp_tx: mpsc::UnboundedSender<atp::Request>,
-    tui_tx: mpsc::UnboundedSender<tui::Request>,
-) -> Result<()> {
+pub async fn start() -> Result<()> {
+    let tui = tui::Tui::new()?;
+    let atp = atp::Atp::new()?;
     let mut view = View::Login(view::Login::new());
 
-    atp_tx.send(atp::Request::GetSession)?;
+    atp.send(atp::Request::GetSession)?;
 
     event!(Level::INFO, "start main loop");
     loop {
-        tui_tx.send(tui::Request::Render(view.clone()))?;
-        tui_tx.send(tui::Request::GetEvent)?;
-        let Some(res) = res_rx.recv().await else {
-            break;
+        tui.render(view.clone()).ok();
+        let ev = tokio::select! {
+            Some(event) = tui.event() => Event::Tui(event),
+            Some(res) = atp.recv() => Event::Atp(res),
+            else => break,
         };
 
         if let View::Login(ref mut login) = view {
-            if let Response::Tui(tui::Response::Event(tui_event)) = res {
-                if let TuiEvent::Key(key_event) = tui_event {
+            if let Event::Tui(tui_event) = ev {
+                if let tui::Event::Key(key_event) = tui_event {
                     if key_event == KeyCode::Esc.into() {
                         if login.has_focus() {
                             login.lose_focus();
@@ -45,7 +44,7 @@ pub async fn start(
                         login.switch_focus();
                         continue;
                     } else if key_event == KeyCode::Enter.into() && login.textarea().is_some() {
-                        atp_tx.send(atp::Request::Login {
+                        atp.send(atp::Request::Login {
                             ident: login.ident(),
                             passwd: login.passwd(),
                         })?;
@@ -55,13 +54,17 @@ pub async fn start(
                 }
 
                 if let Some(ref mut textarea) = login.textarea() {
-                    textarea.input(tui_textarea::Input::from(tui_event));
+                    textarea.input(match tui_event {
+                        tui::Event::Key(key) => Input::from(key),
+                        tui::Event::Mouse(mouse) => Input::from(mouse),
+                        _ => Input::default(),
+                    });
                 }
 
                 continue;
             }
 
-            if let Response::Atp(atp::Response::Session(ref session)) = res {
+            if let Event::Atp(atp::Response::Session(ref session)) = ev {
                 if session.is_none() {
                     login.unblock_input();
                 } else {
@@ -71,7 +74,7 @@ pub async fn start(
                 continue;
             }
 
-            if let Response::Atp(atp::Response::Login(result)) = res {
+            if let Event::Atp(atp::Response::Login(result)) = ev {
                 if let Err(_e) = result {
                     login.unblock_input();
                 } else {
@@ -86,7 +89,7 @@ pub async fn start(
 
         if let View::Home(ref mut home) = view {
             if home.new_posts_required() {
-                atp_tx.send(atp::Request::GetTimeline(
+                atp.send(atp::Request::GetTimeline(
                     bsky::feed::get_timeline::Parameters {
                         algorithm: None,
                         cursor: None,
@@ -96,7 +99,7 @@ pub async fn start(
                 home.wait_response();
             }
 
-            if let Response::Tui(tui::Response::Event(TuiEvent::Key(key_event))) = res {
+            if let Event::Tui(tui::Event::Key(key_event)) = ev {
                 if key_event.code == KeyCode::Esc {
                     break;
                 } else if key_event.kind == KeyEventKind::Release {
@@ -111,7 +114,7 @@ pub async fn start(
                 continue;
             }
 
-            if let Response::Atp(atp::Response::Timeline(Ok(timeline))) = res {
+            if let Event::Atp(atp::Response::Timeline(Ok(timeline))) = ev {
                 for post in timeline.feed.into_iter().rev() {
                     home.add_received_post(post, true);
                 }

@@ -1,6 +1,6 @@
 mod session;
 
-use std::fmt;
+use std::{cell::RefCell, fmt};
 
 use anyhow::Result;
 use atrium_api::{
@@ -11,8 +11,7 @@ use atrium_xrpc_client::reqwest::{ReqwestClient, ReqwestClientBuilder};
 use tokio::sync::mpsc;
 use tracing::{event, instrument, Level};
 
-use crate::app;
-use session::FileStore;
+use self::session::FileStore;
 
 #[derive(Clone)]
 pub enum Request {
@@ -27,24 +26,53 @@ pub enum Response {
     Login(Result<()>),
 }
 
+pub struct Atp {
+    res_rx: RefCell<mpsc::UnboundedReceiver<Response>>,
+    req_tx: mpsc::UnboundedSender<Request>,
+}
+
+impl Atp {
+    pub fn new() -> Result<Self> {
+        let (req_tx, req_rx) = mpsc::unbounded_channel();
+        let (res_tx, res_rx) = mpsc::unbounded_channel();
+        let mut agent = Agent::new(req_rx, res_tx)?;
+        tokio::spawn(async move {
+            agent.task().await;
+        });
+        Ok(Self {
+            res_rx: RefCell::new(res_rx),
+            req_tx,
+        })
+    }
+
+    pub fn send(&self, req: Request) -> Result<()> {
+        self.req_tx.send(req)?;
+        Ok(())
+    }
+
+    pub async fn recv(&self) -> Option<Response> {
+        self.res_rx.borrow_mut().recv().await
+    }
+}
+
+struct Agent {
+    req_rx: mpsc::UnboundedReceiver<Request>,
+    res_tx: mpsc::UnboundedSender<Response>,
+    agent: AtpAgent<FileStore, ReqwestClient>,
+    session: Option<Session>,
+    session_store: FileStore,
+}
+
 enum RawResponse {
     Session(Box<Option<Session>>),
     Timeline(bsky::feed::get_timeline::Output),
     Login,
 }
 
-pub struct Atp {
-    req_rx: mpsc::UnboundedReceiver<Request>,
-    res_tx: mpsc::UnboundedSender<app::Response>,
-    agent: AtpAgent<FileStore, ReqwestClient>,
-    session: Option<Session>,
-    session_store: FileStore,
-}
-
-impl Atp {
-    pub fn new(
+impl Agent {
+    fn new(
         req_rx: mpsc::UnboundedReceiver<Request>,
-        res_tx: mpsc::UnboundedSender<app::Response>,
+        res_tx: mpsc::UnboundedSender<Response>,
     ) -> Result<Self> {
         const USER_AGENT: &str = concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION"));
         let xrpc_client = ReqwestClientBuilder::new("https://bsky.social")
@@ -61,16 +89,15 @@ impl Atp {
         })
     }
 
-    pub async fn start(&mut self) -> Result<()> {
+    async fn task(&mut self) {
         while let Some(req) = self.req_rx.recv().await {
             let r_res = self.handle_request(req.clone()).await;
             let res = convert_raw_response(r_res, req);
-            if self.res_tx.send(app::Response::Atp(res)).is_err() {
+            if self.res_tx.send(res).is_err() {
                 break;
             }
         }
         event!(Level::DEBUG, "stop handler: channel closed");
-        Ok(())
     }
 
     #[instrument(name = "atp", err, ret, skip(self), fields(session = self.handle()))]

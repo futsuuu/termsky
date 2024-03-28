@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     io::{stdout, Stdout},
     sync::{Arc, Mutex},
     time::Duration,
@@ -7,88 +8,51 @@ use std::{
 use anyhow::{bail, Result};
 use crossterm::{
     cursor,
-    event::{self as tui_event, EventStream},
+    event::{self as tui_event, EventStream, KeyEvent, MouseEvent},
     execute, queue, terminal,
 };
 use futures_util::{FutureExt, StreamExt};
 use ratatui::prelude::*;
 use tokio::{sync::mpsc, task, time};
-use tracing::{event, instrument, Level};
+use tracing::{event, Level};
 
-use crate::{app, view::View};
+use crate::view::View;
 
-#[derive(Debug)]
-pub enum Request {
-    GetEvent,
-    Render(View),
-}
-
-pub enum Response {
+pub enum Event {
     Tick,
-    Event(tui_event::Event),
+    Key(KeyEvent),
+    Mouse(MouseEvent),
 }
 
 pub struct Tui {
-    req_rx: mpsc::UnboundedReceiver<Request>,
-    res_tx: mpsc::UnboundedSender<app::Response>,
     terminal: Arc<Mutex<Terminal<CrosstermBackend<Stdout>>>>,
-    interval: time::Interval,
-    events: EventStream,
+    rx: RefCell<mpsc::UnboundedReceiver<Event>>,
 }
 
 impl Tui {
-    pub fn new(
-        req_rx: mpsc::UnboundedReceiver<Request>,
-        res_tx: mpsc::UnboundedSender<app::Response>,
-    ) -> Result<Self> {
-        let backend = CrosstermBackend::new(stdout());
-        let mut terminal = Terminal::new(backend)?;
-        terminal.clear()?;
+    pub fn new() -> Result<Self> {
         Ok(Self {
-            req_rx,
-            res_tx,
-            terminal: Arc::new(Mutex::new(terminal)),
-            interval: time::interval(Duration::from_millis(250)),
-            events: EventStream::new(),
+            terminal: {
+                let backend = CrosstermBackend::new(stdout());
+                let mut terminal = Terminal::new(backend)?;
+                terminal.clear()?;
+                Arc::new(Mutex::new(terminal))
+            },
+            rx: {
+                let (tx, rx) = mpsc::unbounded_channel();
+                task::spawn(collect_event(tx));
+                RefCell::new(rx)
+            },
         })
     }
 
-    pub async fn start(&mut self) -> Result<()> {
-        while let Some(req) = self.req_rx.recv().await {
-            let Ok(Some(res)) = self.handle_request(req).await else {
-                continue;
-            };
-            if self.res_tx.send(app::Response::Tui(res)).is_err() {
-                break;
-            }
-        }
-        event!(Level::DEBUG, "stop handler: channel closed");
-        Ok(())
+    #[inline]
+    pub async fn event(&self) -> Option<Event> {
+        self.rx.borrow_mut().recv().await
     }
 
-    #[instrument(name = "tui", skip(self), err(level = Level::WARN))]
-    async fn handle_request(&mut self, request: Request) -> Result<Option<Response>> {
-        let res = match request {
-            Request::GetEvent => tokio::select! {
-                _ = self.res_tx.closed() => {
-                    None
-                }
-                _ = self.interval.tick() => {
-                    Some(Response::Tick)
-                }
-                Some(Ok(event)) = self.events.next().fuse() => {
-                    Some(Response::Event(event))
-                }
-            },
-            Request::Render(view) => {
-                self.render(view)?;
-                None
-            }
-        };
-        Ok(res)
-    }
-
-    fn render(&self, view: View) -> Result<()> {
+    #[inline]
+    pub fn render(&self, view: View) -> Result<()> {
         // `TryLockError` is not `Send`, so cannot use anyhow directly
         if let Err(e) = self.terminal.try_lock() {
             bail!("skip rendering: {e}");
@@ -101,6 +65,40 @@ impl Tui {
         });
         Ok(())
     }
+}
+
+async fn collect_event(tx: mpsc::UnboundedSender<Event>) {
+    let mut interval = time::interval(Duration::from_millis(250));
+    let mut events = EventStream::new();
+    loop {
+        let event = tokio::select! {
+            _ = tx.closed() => {
+                break;
+            }
+            _ = interval.tick() => {
+                Some(Event::Tick)
+            }
+            Some(Ok(event)) = events.next().fuse() => {
+                match event {
+                    tui_event::Event::Key(key) => {
+                        Some(Event::Key(key))
+                    }
+                    tui_event::Event::Mouse(mouse) => {
+                        Some(Event::Mouse(mouse))
+                    }
+                    _ => None,
+                }
+            }
+        };
+        let Some(event) = event else {
+            continue;
+        };
+        if tx.send(event).is_err() {
+            break;
+        }
+    }
+
+    event!(Level::DEBUG, "stop handler: channel closed");
 }
 
 pub fn enter() -> Result<()> {
