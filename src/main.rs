@@ -26,15 +26,15 @@ enum Event {
 
 #[tokio::main]
 async fn main_async() -> Result<()> {
-    let tui = Tui::new()?;
     let atp = Atp::new()?;
+    let mut tui = Tui::new()?;
     let mut view = View::Login(view::Login::new());
 
     atp.send(AtpRequest::GetSession)?;
 
     event!(Level::INFO, "start main loop");
     loop {
-        tui.render(view.clone()).ok();
+        tui.render(&view)?;
         let ev = tokio::select! {
             Some(event) = tui.event() => Event::Tui(event),
             Some(res) = atp.recv() => Event::Atp(res),

@@ -1,11 +1,9 @@
 use std::{
-    cell::RefCell,
     io::{stdout, Stdout},
-    sync::{Arc, Mutex},
     time::Duration,
 };
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use crossterm::{
     cursor,
     event::{self as tui_event, EventStream, KeyEvent, MouseEvent},
@@ -25,8 +23,8 @@ pub enum Event {
 }
 
 pub struct Tui {
-    terminal: Arc<Mutex<Terminal<CrosstermBackend<Stdout>>>>,
-    rx: RefCell<mpsc::UnboundedReceiver<Event>>,
+    terminal: Terminal<CrosstermBackend<Stdout>>,
+    rx: mpsc::UnboundedReceiver<Event>,
 }
 
 impl Tui {
@@ -36,33 +34,24 @@ impl Tui {
                 let backend = CrosstermBackend::new(stdout());
                 let mut terminal = Terminal::new(backend)?;
                 terminal.clear()?;
-                Arc::new(Mutex::new(terminal))
+                terminal
             },
             rx: {
                 let (tx, rx) = mpsc::unbounded_channel();
                 task::spawn(collect_event(tx));
-                RefCell::new(rx)
+                rx
             },
         })
     }
 
     #[inline]
-    pub async fn event(&self) -> Option<Event> {
-        self.rx.borrow_mut().recv().await
+    pub async fn event(&mut self) -> Option<Event> {
+        self.rx.recv().await
     }
 
     #[inline]
-    pub fn render(&self, view: View) -> Result<()> {
-        // `TryLockError` is not `Send`, so cannot use anyhow directly
-        if let Err(e) = self.terminal.try_lock() {
-            bail!("skip rendering: {e}");
-        }
-        let terminal = Arc::clone(&self.terminal);
-        let _task = task::spawn_blocking(move || -> Result<()> {
-            let mut terminal = terminal.lock().unwrap();
-            terminal.draw(|f| view.render(f))?;
-            Ok(())
-        });
+    pub fn render(&mut self, view: &View) -> Result<()> {
+        self.terminal.draw(|f| f.render_widget(view, f.size()))?;
         Ok(())
     }
 }

@@ -8,7 +8,7 @@ use textwrap::wrap;
 
 use super::{LazyBuffer, LazyWidget};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Posts {
     posts: Vec<Post>,
     pub scrolled_posts: usize,
@@ -55,7 +55,7 @@ impl WidgetRef for Posts {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Post {
     author: Account,
     content: String,
@@ -66,20 +66,20 @@ struct Post {
     embed: Option<Embed>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct Account {
     name: String,
     opt_name: Option<String>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 enum Embed {
     External(bsky::embed::external::ViewExternal),
     Image(Vec<EmbedImage>),
     Unimplemented,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 struct EmbedImage {
     alt: String,
 }

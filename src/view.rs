@@ -3,33 +3,30 @@ mod login;
 
 use std::fmt;
 
-use ratatui::terminal::Frame;
+use ratatui::{prelude::*, widgets::*};
 use tracing::{event, Level};
 
 pub use home::Home;
 pub use login::Login;
 
-#[derive(Clone)]
 pub enum View {
     Login(Login),
     Home(Home),
 }
 
 impl View {
-    pub fn render(&self, frame: &mut Frame) {
-        match self {
-            View::Login(login) => {
-                frame.render_widget(login, frame.size());
-            }
-            View::Home(home) => {
-                frame.render_widget(home, frame.size());
-            }
-        }
-    }
-
     pub fn update<V: Into<View>>(&mut self, new: V) {
         *self = new.into();
         event!(Level::DEBUG, "set view: {self:?}");
+    }
+}
+
+impl WidgetRef for View {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        match self {
+            View::Login(login) => login.render(area, buf),
+            View::Home(home) => home.render(area, buf),
+        }
     }
 }
 

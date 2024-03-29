@@ -3,7 +3,7 @@ use ratatui::{prelude::*, widgets::*};
 
 use crate::widgets::Posts;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Home {
     posts: Posts,
     /// Used to get old posts

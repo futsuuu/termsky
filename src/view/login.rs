@@ -2,7 +2,7 @@ use ratatui::prelude::*;
 
 use crate::widgets::TextArea;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Login {
     textareas: [TextArea<'static>; 2],
     focus: Option<usize>,

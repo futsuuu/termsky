@@ -3,7 +3,6 @@ use std::{fmt, ops};
 use ratatui::{prelude::*, widgets::*};
 use tui_textarea::TextArea;
 
-#[derive(Clone)]
 pub struct Wrapper<'a> {
     title: &'a str,
     inner: TextArea<'a>,
