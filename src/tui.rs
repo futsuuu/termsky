@@ -67,6 +67,16 @@ impl Tui {
     }
 }
 
+impl From<Event> for tui_textarea::Input {
+    fn from(value: Event) -> Self {
+        match value {
+            Event::Key(key) => Self::from(key),
+            Event::Mouse(mouse) => Self::from(mouse),
+            _ => Self::default(),
+        }
+    }
+}
+
 async fn collect_event(tx: mpsc::UnboundedSender<Event>) {
     let mut interval = time::interval(Duration::from_millis(250));
     let mut events = EventStream::new();

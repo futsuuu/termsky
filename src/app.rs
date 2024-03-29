@@ -2,7 +2,6 @@ use anyhow::Result;
 use atrium_api::app::bsky;
 use crossterm::event::{KeyCode, KeyEventKind};
 use tracing::{event, Level};
-use tui_textarea::Input;
 
 use crate::{
     atp, tui,
@@ -54,11 +53,7 @@ pub async fn start() -> Result<()> {
                 }
 
                 if let Some(ref mut textarea) = login.textarea() {
-                    textarea.input(match tui_event {
-                        tui::Event::Key(key) => Input::from(key),
-                        tui::Event::Mouse(mouse) => Input::from(mouse),
-                        _ => Input::default(),
-                    });
+                    textarea.input(tui_event);
                 }
 
                 continue;
