@@ -6,7 +6,7 @@ use atrium_api::{
 use ratatui::{prelude::*, widgets::*};
 use textwrap::wrap;
 
-use super::{LazyBuffer, LazyWidget};
+use super::{Store, Storeable};
 
 #[derive(Debug)]
 pub struct Posts {
@@ -38,9 +38,9 @@ impl Posts {
 
 impl WidgetRef for Posts {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let mut lbuf = LazyBuffer::new();
+        let mut store = Store::new();
         for post in self.posts.iter().skip(self.scrolled_posts) {
-            let rendered = lbuf.rendered_area();
+            let rendered = store.stored_area();
             let space = Rect {
                 y: area.y + rendered.height,
                 height: area.height.saturating_sub(rendered.height),
@@ -49,9 +49,9 @@ impl WidgetRef for Posts {
             if space.height == 0 {
                 break;
             }
-            post.render_lazy(space, &mut lbuf);
+            post.store(space, &mut store);
         }
-        lbuf.render_ref(area, buf);
+        store.render_ref(area, buf);
     }
 }
 
@@ -144,16 +144,16 @@ impl From<bsky::feed::defs::PostViewEmbedRefs> for Embed {
     }
 }
 
-impl<'a> LazyWidget<'a> for &'a Post {
-    fn render_lazy(self, area: Rect, buf: &mut LazyBuffer<'a>) {
+impl<'a> Storeable<'a> for &'a Post {
+    fn store(self, area: Rect, store: &mut Store<'a>) {
         let wrapped_content = wrap(self.content.as_str(), area.width as usize);
         let embed_height = self
             .embed
             .as_ref()
             .map(|e| {
-                let mut vbuf = LazyBuffer::new();
-                e.render_lazy(area, &mut vbuf);
-                vbuf.rendered_area().height
+                let mut store = Store::new();
+                e.store(area, &mut store);
+                store.stored_area().height
             })
             .unwrap_or_default();
         let [repost_info_area, header_area, content_area, embed_area, footer_area] =
@@ -171,7 +171,7 @@ impl<'a> LazyWidget<'a> for &'a Post {
 
         if let Some(reposted_by) = &self.reposted_by {
             Span::from(format!("  Reposted by {}", reposted_by.name))
-                .render_lazy(repost_info_area, buf);
+                .store(repost_info_area, store);
         }
         Paragraph::new({
             let mut spans = vec![self.author.name.clone().bold()];
@@ -181,7 +181,7 @@ impl<'a> LazyWidget<'a> for &'a Post {
             Line::from(spans)
         })
         .block(Block::new().padding(Padding::bottom(1)))
-        .render_lazy(header_area, buf);
+        .store(header_area, store);
         Paragraph::new(
             wrapped_content
                 .iter()
@@ -189,9 +189,9 @@ impl<'a> LazyWidget<'a> for &'a Post {
                 .map(Line::from)
                 .collect::<Vec<_>>(),
         )
-        .render_lazy(content_area, buf);
+        .store(content_area, store);
         if let Some(embed) = &self.embed {
-            embed.render_lazy(embed_area, buf);
+            embed.store(embed_area, store);
         }
         Paragraph::new(format!(
             " {}    {}   ♥ {}",
@@ -203,12 +203,12 @@ impl<'a> LazyWidget<'a> for &'a Post {
                 .borders(Borders::BOTTOM)
                 .border_style(Style::new().blue().dim()),
         )
-        .render_lazy(footer_area, buf);
+        .store(footer_area, store);
     }
 }
 
-impl<'a> LazyWidget<'a> for &'a Embed {
-    fn render_lazy(self, area: Rect, buf: &mut LazyBuffer<'a>) {
+impl<'a> Storeable<'a> for &'a Embed {
+    fn store(self, area: Rect, store: &mut Store<'a>) {
         match self {
             Embed::External(external) => {
                 let block = Block::bordered()
@@ -248,7 +248,7 @@ impl<'a> LazyWidget<'a> for &'a Embed {
                 let height = lines.len() as u16 + 2; // inner + border
                 Paragraph::new(lines)
                     .block(block)
-                    .render_lazy(Rect { height, ..area }, buf);
+                    .store(Rect { height, ..area }, store);
             }
 
             Embed::Image(images) => {
@@ -261,12 +261,12 @@ impl<'a> LazyWidget<'a> for &'a Embed {
                 )
                 .split(area);
                 for (_image, layout) in images.iter().zip(layouts.iter()) {
-                    Span::from(" ").render_lazy(*layout, buf);
+                    Span::from(" ").store(*layout, store);
                 }
             }
 
             Embed::Unimplemented => {
-                Span::from(format!("unimplemented!")).render_lazy(Rect { height: 1, ..area }, buf);
+                Span::from(format!("unimplemented!")).store(Rect { height: 1, ..area }, store);
             }
         }
     }
