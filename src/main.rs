@@ -1,5 +1,4 @@
 use anyhow::Result;
-use atrium_api::app::bsky;
 use crossterm::event::{KeyCode, KeyEventKind};
 use tracing::{event, Level};
 
@@ -94,15 +93,8 @@ async fn main_async() -> Result<()> {
         }
 
         if let View::Home(ref mut home) = view {
-            if home.new_posts_required() {
-                atp.send(AtpRequest::GetTimeline(
-                    bsky::feed::get_timeline::Parameters {
-                        algorithm: None,
-                        cursor: None,
-                        limit: 20.try_into().ok(),
-                    },
-                ))?;
-                home.wait_response();
+            if let Some(params) = home.get_timeline_params() {
+                atp.send(AtpRequest::GetTimeline(params))?;
             }
 
             if let Event::Tui(TuiEvent::Key(key_event)) = ev {
@@ -121,9 +113,7 @@ async fn main_async() -> Result<()> {
             }
 
             if let Event::Atp(AtpResponse::Timeline(Ok(timeline))) = ev {
-                for post in timeline.feed.into_iter().rev() {
-                    home.add_received_post(post, true);
-                }
+                home.recv_timeline(timeline);
             }
         }
     }

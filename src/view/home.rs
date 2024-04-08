@@ -1,11 +1,14 @@
-use atrium_api::app::bsky::feed::defs::FeedViewPost;
+use std::cell::RefCell;
+
+use atrium_api::app::bsky;
 use ratatui::{prelude::*, widgets::*};
 
-use crate::widgets::Posts;
+use crate::widgets::{Posts, PostsState};
 
 #[derive(Debug)]
 pub struct Home {
     posts: Posts,
+    posts_state: RefCell<PostsState>,
     /// Used to get old posts
     post_cursor: Option<String>,
     /// true when waiting the response
@@ -16,22 +19,30 @@ impl Home {
     pub fn new() -> Self {
         Self {
             posts: Posts::new(),
+            posts_state: RefCell::new(PostsState::new()),
             post_cursor: None,
             waiting: false,
         }
     }
 
-    pub fn wait_response(&mut self) {
+    pub fn get_timeline_params(&mut self) -> Option<bsky::feed::get_timeline::Parameters> {
+        if self.posts_state.borrow().blank_height.is_none() || self.waiting {
+            return None;
+        }
         self.waiting = true;
+        Some(bsky::feed::get_timeline::Parameters {
+            algorithm: None,
+            cursor: self.post_cursor.clone(),
+            limit: 15.try_into().ok(),
+        })
     }
 
-    pub fn add_received_post(&mut self, post: FeedViewPost, new: bool) {
+    pub fn recv_timeline(&mut self, timeline: bsky::feed::get_timeline::Output) {
         self.waiting = false;
-        self.posts.add_post(post, new);
-    }
-
-    pub fn new_posts_required(&self) -> bool {
-        self.posts.is_empty() && !self.waiting
+        self.post_cursor = timeline.cursor;
+        for post in timeline.feed {
+            self.posts.add_post(post, false);
+        }
     }
 
     pub fn scroll_up(&mut self) {
@@ -51,6 +62,6 @@ impl WidgetRef for Home {
             Constraint::Fill(2),
         ])
         .areas(area);
-        self.posts.render_ref(area, buf);
+        self.posts.render_ref(area, buf, &mut self.posts_state.borrow_mut());
     }
 }

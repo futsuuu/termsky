@@ -14,6 +14,11 @@ pub struct Posts {
     pub scroll: u16,
 }
 
+#[derive(Debug)]
+pub struct PostsState {
+    pub blank_height: Option<u16>,
+}
+
 impl Posts {
     pub fn new() -> Self {
         Self {
@@ -30,14 +35,18 @@ impl Posts {
             self.posts.push(post);
         }
     }
+}
 
-    pub fn is_empty(&self) -> bool {
-        self.posts.is_empty()
+impl PostsState {
+    pub fn new() -> Self {
+        Self { blank_height: None }
     }
 }
 
-impl WidgetRef for Posts {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+impl StatefulWidgetRef for Posts {
+    type State = PostsState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let mut store = Store::new().scroll_v(self.scroll as i16);
         for post in &self.posts {
             let stored_height = store.stored_area().height;
@@ -50,6 +59,7 @@ impl WidgetRef for Posts {
                 &mut store,
             );
         }
+        state.blank_height = (self.scroll + area.height).checked_sub(store.stored_area().height);
         store.render_ref(area, buf);
     }
 }
