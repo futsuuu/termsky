@@ -11,14 +11,14 @@ use super::{Store, Storeable};
 #[derive(Debug)]
 pub struct Posts {
     posts: Vec<Post>,
-    pub scrolled_posts: usize,
+    pub scroll: u16,
 }
 
 impl Posts {
     pub fn new() -> Self {
         Self {
             posts: Vec::new(),
-            scrolled_posts: 0,
+            scroll: 0,
         }
     }
 
@@ -38,18 +38,17 @@ impl Posts {
 
 impl WidgetRef for Posts {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let mut store = Store::new();
-        for post in self.posts.iter().skip(self.scrolled_posts) {
-            let rendered = store.stored_area();
-            let space = Rect {
-                y: area.y + rendered.height,
-                height: area.height.saturating_sub(rendered.height),
-                ..area
-            };
-            if space.height == 0 {
-                break;
-            }
-            post.store(space, &mut store);
+        let mut store = Store::new().scroll_v(self.scroll as i16);
+        for post in &self.posts {
+            let stored_height = store.stored_area().height;
+            post.store(
+                Rect {
+                    y: stored_height,
+                    height: u16::MAX,
+                    ..area
+                },
+                &mut store,
+            );
         }
         store.render_ref(area, buf);
     }

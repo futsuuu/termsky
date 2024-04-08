@@ -1390,6 +1390,7 @@ dependencies = [
  "crossterm",
  "dirs",
  "futures-util",
+ "indoc",
  "ratatui",
  "reqwest",
  "scopeguard",

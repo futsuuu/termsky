@@ -35,11 +35,11 @@ impl Home {
     }
 
     pub fn scroll_up(&mut self) {
-        self.posts.scrolled_posts = self.posts.scrolled_posts.saturating_sub(1);
+        self.posts.scroll = self.posts.scroll.saturating_sub(1);
     }
 
     pub fn scroll_down(&mut self) {
-        self.posts.scrolled_posts += 1;
+        self.posts.scroll += 1;
     }
 }
 

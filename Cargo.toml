@@ -26,3 +26,6 @@ futures-util = { version = "0.3", default-features = false }
 tui-textarea = "0.4"
 textwrap = "0.16"
 scopeguard = "1.2"
+
+[dev-dependencies]
+indoc = "*"  # used in `ratatui::assert_buffer_eq`
