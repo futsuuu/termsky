@@ -12,11 +12,10 @@ use termsky::{
 
 fn main() -> Result<()> {
     utils::init()?;
-    scopeguard::defer! {
-        tui::exit().expect("failed to reset the terminal");
-    }
     tui::enter()?;
-    main_async()
+    main_async()?;
+    tui::exit()?;
+    Ok(())
 }
 
 enum Event {

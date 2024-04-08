@@ -1,6 +1,7 @@
 use std::{
     io::{stdout, Stdout},
     time::Duration,
+    panic,
 };
 
 use anyhow::Result;
@@ -101,6 +102,12 @@ async fn collect_event(tx: mpsc::UnboundedSender<Event>) {
 }
 
 pub fn enter() -> Result<()> {
+    let panic_hook = panic::take_hook();
+    panic::set_hook(Box::new(move |panic| {
+        exit().expect("failed to reset the terminal");
+        panic_hook(panic);
+    }));
+
     event!(Level::TRACE, "start rendering");
     terminal::enable_raw_mode()?;
     queue!(
