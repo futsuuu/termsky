@@ -2,9 +2,9 @@ use ratatui::{prelude::*, widgets::*};
 
 pub struct Store<'a> {
     widgets: Vec<(Rect, Box<dyn WidgetRef + 'a>)>,
-    pub scroll_v: i16,
+    pub scroll_v: i32,
     // Currently not needed
-    // pub scroll_h: i16,
+    // pub scroll_h: i32,
 }
 
 pub trait Storeable<'a> {
@@ -30,7 +30,7 @@ impl Store<'_> {
             .unwrap_or_default()
     }
 
-    pub fn scroll_v(mut self, n: i16) -> Self {
+    pub fn scroll_v(mut self, n: i32) -> Self {
         self.scroll_v = n;
         self
     }
@@ -62,17 +62,25 @@ impl WidgetRef for Store<'_> {
     fn render_ref(&self, viewport: Rect, buf: &mut Buffer) {
         let content_area = self.stored_area();
         let render_area = {
-            let y = viewport.y.saturating_add_signed(self.scroll_v);
+            let y = (viewport.y as u32).saturating_add_signed(self.scroll_v);
             // `height` is not always equal to `viewport.height` if `scroll_v` < 0
-            let height = (viewport.bottom() as i16 + self.scroll_v) as u16 - y;
+            let height = (viewport.bottom() as i32 + self.scroll_v) as u32 - y;
             content_area.intersection(Rect {
-                y,
-                height,
+                y: y as u16,
+                height: height as u16,
                 ..viewport
             })
         };
         let content = {
-            let mut buf = Buffer::empty(content_area);
+            let Some(area_size) =
+                (content_area.width as usize).checked_mul(content_area.height as usize)
+            else {
+                panic!("stored widgets are too large");
+            };
+            let mut buf = Buffer {
+                area: content_area,
+                content: vec![ratatui::buffer::Cell::default(); area_size],
+            };
             for (widget_area, widget) in &self.widgets {
                 if render_area.intersects(*widget_area) {
                     widget.render_ref(*widget_area, &mut buf);
@@ -82,7 +90,7 @@ impl WidgetRef for Store<'_> {
         };
         for x in render_area.left()..render_area.right() {
             for y in render_area.top()..render_area.bottom() {
-                let ry = y.checked_add_signed(-self.scroll_v).unwrap();
+                let ry = (y as u32).checked_add_signed(-self.scroll_v).unwrap() as u16;
                 *buf.get_mut(x, ry) = content.get(x, y).clone();
             }
         }

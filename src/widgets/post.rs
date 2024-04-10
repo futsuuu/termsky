@@ -47,7 +47,7 @@ impl StatefulWidgetRef for Posts {
     type State = PostsState;
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        let mut store = Store::new().scroll_v(self.scroll as i16);
+        let mut store = Store::new().scroll_v(self.scroll as i32);
         for post in &self.posts {
             let stored_height = store.stored_area().height;
             post.store(
