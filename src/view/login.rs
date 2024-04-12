@@ -1,6 +1,6 @@
 use ratatui::prelude::*;
 
-use crate::widgets::TextArea;
+use crate::widgets::{Spinner, TextArea};
 
 #[derive(Debug)]
 pub struct Login {
@@ -89,16 +89,20 @@ impl Widget for &Login {
             Constraint::Percentage(30),
         ])
         .areas(area);
-        let [_, ident, passwd, _] = Layout::vertical([
+        let [_, ident, passwd, spinner, _] = Layout::vertical([
             Constraint::Percentage(30),
             Constraint::Length(3),
             Constraint::Length(3),
-            Constraint::Min(1),
+            Constraint::Length(3),
+            Constraint::Fill(1),
         ])
         .spacing(1)
         .areas(area);
 
         self.textareas[0].widget().render(ident, buf);
         self.textareas[1].widget().render(passwd, buf);
+        if self.block_input {
+            Spinner::new().render(spinner, buf);
+        }
     }
 }

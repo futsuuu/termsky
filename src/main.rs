@@ -26,7 +26,7 @@ enum Event {
 async fn main_async() -> Result<()> {
     let atp = Atp::new()?;
     let mut tui = Tui::new()?;
-    let mut view = View::Login(view::Login::new());
+    let mut view = View::Loading(view::Loading::new());
 
     atp.send(AtpRequest::GetSession)?;
 
@@ -38,6 +38,26 @@ async fn main_async() -> Result<()> {
             Some(res) = atp.recv() => Event::Atp(res),
             else => break,
         };
+
+        if let View::Loading(_) = view {
+            if let Event::Tui(TuiEvent::Key(key_event)) = &ev {
+                if key_event.code == KeyCode::Esc {
+                    break;
+                }
+                continue;
+            }
+
+            if let Event::Atp(AtpResponse::Session(session)) = &ev {
+                if session.is_some() {
+                    view.update(view::Home::new());
+                } else {
+                    let mut login = view::Login::new();
+                    login.unblock_input();
+                    view.update(login);
+                }
+                continue;
+            }
+        }
 
         if let View::Login(ref mut login) = view {
             if let Event::Tui(tui_event) = ev {
@@ -64,16 +84,6 @@ async fn main_async() -> Result<()> {
 
                 if let Some(ref mut textarea) = login.textarea() {
                     textarea.input(tui_event);
-                }
-
-                continue;
-            }
-
-            if let Event::Atp(AtpResponse::Session(ref session)) = ev {
-                if session.is_none() {
-                    login.unblock_input();
-                } else {
-                    view.update(view::Home::new());
                 }
 
                 continue;

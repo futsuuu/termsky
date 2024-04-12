@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use atrium_api::app::bsky;
 use ratatui::{prelude::*, widgets::*};
 
-use crate::widgets::{Posts, PostsState};
+use crate::widgets::{Posts, PostsState, Spinner};
 
 #[derive(Debug)]
 pub struct Home {
@@ -62,6 +62,23 @@ impl WidgetRef for Home {
             Constraint::Fill(2),
         ])
         .areas(area);
-        self.posts.render_ref(area, buf, &mut self.posts_state.borrow_mut());
+        let mut posts_state = self.posts_state.borrow_mut();
+
+        self.posts.render_ref(area, buf, &mut posts_state);
+
+        let Some(blank_height) = posts_state.blank_height else {
+            return;
+        };
+        let blank_area = Rect {
+            height: blank_height,
+            y: area.height - blank_height,
+            ..area
+        };
+        let [_, spinner_area] = Layout::vertical([
+            Constraint::Length(14_u16.saturating_sub(blank_area.height)),
+            Constraint::Fill(1),
+        ])
+        .areas(blank_area);
+        Spinner::new().render_ref(spinner_area, buf);
     }
 }

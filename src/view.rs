@@ -1,4 +1,5 @@
 mod home;
+mod loading;
 mod login;
 
 use std::fmt;
@@ -7,11 +8,13 @@ use ratatui::{prelude::*, widgets::*};
 use tracing::{event, Level};
 
 pub use home::Home;
+pub use loading::Loading;
 pub use login::Login;
 
 pub enum View {
-    Login(Login),
     Home(Home),
+    Loading(Loading),
+    Login(Login),
 }
 
 impl View {
@@ -24,15 +27,10 @@ impl View {
 impl WidgetRef for View {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         match self {
-            View::Login(login) => login.render(area, buf),
             View::Home(home) => home.render(area, buf),
+            View::Loading(loading) => loading.render(area, buf),
+            View::Login(login) => login.render(area, buf),
         }
-    }
-}
-
-impl From<Login> for View {
-    fn from(value: Login) -> Self {
-        Self::Login(value)
     }
 }
 
@@ -42,11 +40,24 @@ impl From<Home> for View {
     }
 }
 
+impl From<Loading> for View {
+    fn from(value: Loading) -> Self {
+        Self::Loading(value)
+    }
+}
+
+impl From<Login> for View {
+    fn from(value: Login) -> Self {
+        Self::Login(value)
+    }
+}
+
 impl fmt::Debug for View {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str(match self {
-            Self::Login(_) => "Login",
             Self::Home(_) => "Home",
+            Self::Loading(_) => "Loading",
+            Self::Login(_) => "Login",
         })
     }
 }
