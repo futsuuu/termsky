@@ -7,6 +7,8 @@ use std::fmt;
 use ratatui::{prelude::*, widgets::*};
 use tracing::{event, Level};
 
+use crate::prelude::*;
+
 pub use home::Home;
 pub use loading::Loading;
 pub use login::Login;
@@ -27,30 +29,44 @@ impl View {
 impl WidgetRef for View {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         match self {
-            View::Home(home) => home.render(area, buf),
-            View::Loading(loading) => loading.render(area, buf),
-            View::Login(login) => login.render(area, buf),
+            View::Home(v) => v.render_ref(area, buf),
+            View::Loading(v) => v.render_ref(area, buf),
+            View::Login(v) => v.render_ref(area, buf),
         }
     }
 }
 
-impl From<Home> for View {
-    fn from(value: Home) -> Self {
-        Self::Home(value)
+impl AppHandler for View {
+    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+        match self {
+            View::Home(v) => v.tui_event(app, ev),
+            View::Loading(v) => v.tui_event(app, ev),
+            View::Login(v) => v.tui_event(app, ev),
+        }
+    }
+
+    fn atp_response(&mut self, app: &mut App, res: AtpResponse) {
+        match self {
+            View::Home(v) => v.atp_response(app, res),
+            View::Loading(v) => v.atp_response(app, res),
+            View::Login(v) => v.atp_response(app, res),
+        }
     }
 }
 
-impl From<Loading> for View {
-    fn from(value: Loading) -> Self {
-        Self::Loading(value)
-    }
+macro_rules! impl_from {
+    ($s:ident) => {
+        impl From<$s> for View {
+            fn from(value: $s) -> Self {
+                Self::$s(value)
+            }
+        }
+    };
 }
 
-impl From<Login> for View {
-    fn from(value: Login) -> Self {
-        Self::Login(value)
-    }
-}
+impl_from!(Home);
+impl_from!(Loading);
+impl_from!(Login);
 
 impl fmt::Debug for View {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

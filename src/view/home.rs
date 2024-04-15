@@ -3,7 +3,10 @@ use std::cell::RefCell;
 use atrium_api::app::bsky;
 use ratatui::{prelude::*, widgets::*};
 
-use crate::widgets::{Posts, PostsState, Spinner};
+use crate::{
+    prelude::*,
+    widgets::{Posts, PostsState, Spinner},
+};
 
 #[derive(Debug)]
 pub struct Home {
@@ -80,5 +83,31 @@ impl WidgetRef for Home {
         ])
         .areas(blank_area);
         Spinner::new().render_ref(spinner_area, buf);
+    }
+}
+
+impl AppHandler for Home {
+    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+        if let Some(params) = self.get_timeline_params() {
+            app.send(AtpRequest::GetTimeline(params));
+        }
+        if let TuiEvent::Key(key_event) = ev {
+            if key_event.code == KeyCode::Esc {
+                app.exit();
+                return;
+            }
+            if key_event.code == KeyCode::Char('k') {
+                self.scroll_up();
+            }
+            if key_event.code == KeyCode::Char('j') {
+                self.scroll_down();
+            }
+        }
+    }
+
+    fn atp_response(&mut self, _app: &mut App, res: AtpResponse) {
+        if let AtpResponse::Timeline(Ok(timeline)) = res {
+            self.recv_timeline(timeline);
+        }
     }
 }

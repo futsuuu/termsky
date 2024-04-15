@@ -1,6 +1,6 @@
 mod session;
 
-use std::{cell::RefCell, fmt};
+use std::fmt;
 
 use anyhow::Result;
 use atrium_api::{
@@ -27,7 +27,7 @@ pub enum Response {
 }
 
 pub struct Atp {
-    res_rx: RefCell<mpsc::UnboundedReceiver<Response>>,
+    res_rx: mpsc::UnboundedReceiver<Response>,
     req_tx: mpsc::UnboundedSender<Request>,
 }
 
@@ -39,10 +39,7 @@ impl Atp {
         tokio::spawn(async move {
             agent.task().await;
         });
-        Ok(Self {
-            res_rx: RefCell::new(res_rx),
-            req_tx,
-        })
+        Ok(Self { res_rx, req_tx })
     }
 
     pub fn send(&self, req: Request) -> Result<()> {
@@ -50,8 +47,8 @@ impl Atp {
         Ok(())
     }
 
-    pub async fn recv(&self) -> Option<Response> {
-        self.res_rx.borrow_mut().recv().await
+    pub async fn recv(&mut self) -> Option<Response> {
+        self.res_rx.recv().await
     }
 }
 

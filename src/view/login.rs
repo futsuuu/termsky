@@ -1,6 +1,10 @@
-use ratatui::prelude::*;
+use ratatui::{prelude::*, widgets::*};
 
-use crate::widgets::{Spinner, TextArea};
+use crate::{
+    prelude::*,
+    view,
+    widgets::{Spinner, TextArea},
+};
 
 #[derive(Debug)]
 pub struct Login {
@@ -81,8 +85,8 @@ impl Login {
     }
 }
 
-impl Widget for &Login {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+impl WidgetRef for Login {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         let [_, area, _] = Layout::horizontal([
             Constraint::Percentage(30),
             Constraint::Min(50),
@@ -103,6 +107,45 @@ impl Widget for &Login {
         self.textareas[1].widget().render(passwd, buf);
         if self.block_input {
             Spinner::new().render(spinner, buf);
+        }
+    }
+}
+
+impl AppHandler for Login {
+    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+        if let TuiEvent::Key(ev) = ev {
+            if ev.code == KeyCode::Esc {
+                if self.has_focus() {
+                    self.lose_focus();
+                } else {
+                    app.exit();
+                }
+                return;
+            } else if ev.code == KeyCode::Tab {
+                self.switch_focus();
+                return;
+            } else if ev.code == KeyCode::Enter && self.textarea().is_some() {
+                app.send(AtpRequest::Login {
+                    ident: self.ident(),
+                    passwd: self.passwd(),
+                });
+                self.block_input();
+                return;
+            }
+        }
+
+        if let Some(ref mut textarea) = self.textarea() {
+            textarea.input(ev);
+        }
+    }
+
+    fn atp_response(&mut self, app: &mut App, res: AtpResponse) {
+        if let AtpResponse::Login(result) = res {
+            if let Err(_e) = result {
+                self.unblock_input();
+            } else {
+                app.update_view(view::Home::new());
+            }
         }
     }
 }

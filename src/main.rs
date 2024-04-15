@@ -1,131 +1,15 @@
-use anyhow::Result;
-use crossterm::event::KeyCode;
-use tracing::{event, Level};
+mod app;
+mod atp;
+mod prelude;
+mod tui;
+mod utils;
+mod view;
+mod widgets;
 
-use termsky::{
-    atp::{Atp, Request as AtpRequest, Response as AtpResponse},
-    tui::{self, Event as TuiEvent, Tui},
-    utils,
-    view::{self, View},
-};
-
-fn main() -> Result<()> {
+fn main() -> anyhow::Result<()> {
     utils::init()?;
     tui::enter()?;
-    main_async()?;
+    app::run()?;
     tui::exit()?;
-    Ok(())
-}
-
-enum Event {
-    Atp(AtpResponse),
-    Tui(TuiEvent),
-}
-
-#[tokio::main]
-async fn main_async() -> Result<()> {
-    let atp = Atp::new()?;
-    let mut tui = Tui::new()?;
-    let mut view = View::Loading(view::Loading::new());
-
-    atp.send(AtpRequest::GetSession)?;
-
-    event!(Level::INFO, "start main loop");
-    loop {
-        tui.render(&view)?;
-        let ev = tokio::select! {
-            Some(event) = tui.event() => Event::Tui(event),
-            Some(res) = atp.recv() => Event::Atp(res),
-            else => break,
-        };
-
-        if let View::Loading(_) = view {
-            if let Event::Tui(TuiEvent::Key(key_event)) = &ev {
-                if key_event.code == KeyCode::Esc {
-                    break;
-                }
-                continue;
-            }
-
-            if let Event::Atp(AtpResponse::Session(session)) = &ev {
-                if session.is_some() {
-                    view.update(view::Home::new());
-                } else {
-                    let mut login = view::Login::new();
-                    login.unblock_input();
-                    view.update(login);
-                }
-                continue;
-            }
-        }
-
-        if let View::Login(ref mut login) = view {
-            if let Event::Tui(tui_event) = ev {
-                if let TuiEvent::Key(key_event) = tui_event {
-                    if key_event == KeyCode::Esc.into() {
-                        if login.has_focus() {
-                            login.lose_focus();
-                        } else {
-                            break;
-                        }
-                        continue;
-                    } else if key_event == KeyCode::Tab.into() {
-                        login.switch_focus();
-                        continue;
-                    } else if key_event == KeyCode::Enter.into() && login.textarea().is_some() {
-                        atp.send(AtpRequest::Login {
-                            ident: login.ident(),
-                            passwd: login.passwd(),
-                        })?;
-                        login.block_input();
-                        continue;
-                    }
-                }
-
-                if let Some(ref mut textarea) = login.textarea() {
-                    textarea.input(tui_event);
-                }
-
-                continue;
-            }
-
-            if let Event::Atp(AtpResponse::Login(result)) = ev {
-                if let Err(_e) = result {
-                    login.unblock_input();
-                } else {
-                    view.update(view::Home::new());
-                }
-
-                continue;
-            }
-
-            continue;
-        }
-
-        if let View::Home(ref mut home) = view {
-            if let Some(params) = home.get_timeline_params() {
-                atp.send(AtpRequest::GetTimeline(params))?;
-            }
-
-            if let Event::Tui(TuiEvent::Key(key_event)) = ev {
-                if key_event.code == KeyCode::Esc {
-                    break;
-                }
-                if key_event.code == KeyCode::Char('k') {
-                    home.scroll_up();
-                }
-                if key_event.code == KeyCode::Char('j') {
-                    home.scroll_down();
-                }
-                continue;
-            }
-
-            if let Event::Atp(AtpResponse::Timeline(Ok(timeline))) = ev {
-                home.recv_timeline(timeline);
-            }
-        }
-    }
-
-    event!(Level::INFO, "stop main loop");
     Ok(())
 }
