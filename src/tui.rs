@@ -1,13 +1,13 @@
 use std::{
     io::{stdout, Stdout},
-    time::Duration,
     panic,
+    time::Duration,
 };
 
 use anyhow::Result;
 use crossterm::{
     cursor,
-    event::{self as tui_event, EventStream, KeyEvent, MouseEvent},
+    event::{self as tui_event, EventStream, KeyEvent, KeyEventKind, MouseEvent},
     execute, queue, terminal,
 };
 use futures_util::{FutureExt, StreamExt};
@@ -81,7 +81,11 @@ async fn collect_event(tx: mpsc::UnboundedSender<Event>) {
             Some(Ok(event)) = events.next().fuse() => {
                 match event {
                     tui_event::Event::Key(key) => {
-                        Some(Event::Key(key))
+                        if key.kind == KeyEventKind::Release {
+                            None
+                        } else {
+                            Some(Event::Key(key))
+                        }
                     }
                     tui_event::Event::Mouse(mouse) => {
                         Some(Event::Mouse(mouse))

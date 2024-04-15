@@ -1,5 +1,5 @@
 use anyhow::Result;
-use crossterm::event::{KeyCode, KeyEventKind};
+use crossterm::event::KeyCode;
 use tracing::{event, Level};
 
 use termsky::{
@@ -110,8 +110,6 @@ async fn main_async() -> Result<()> {
             if let Event::Tui(TuiEvent::Key(key_event)) = ev {
                 if key_event.code == KeyCode::Esc {
                     break;
-                } else if key_event.kind == KeyEventKind::Release {
-                    continue;
                 }
                 if key_event.code == KeyCode::Char('k') {
                     home.scroll_up();
