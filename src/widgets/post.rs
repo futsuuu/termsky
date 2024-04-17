@@ -84,11 +84,9 @@ nestify::nest! {
             opt_name: Option<String>,
         },
         content: String,
-        counts: Option<struct Counts {
-            likes: u64,
-            replies: u64,
-            reposts: u64,
-        }>,
+        likes: u64,
+        replies: u64,
+        reposts: u64,
         reposted_by: Option<Account>,
         embed: Option<enum Embed {
             Media(enum EmbedMedia {
@@ -120,11 +118,9 @@ impl From<FeedViewPost> for Post {
                 }
                 _ => String::from("unimplemented!"),
             },
-            counts: Some(Counts {
-                likes: post.like_count.unwrap_or(0) as u64,
-                replies: post.reply_count.unwrap_or(0) as u64,
-                reposts: post.repost_count.unwrap_or(0) as u64,
-            }),
+            likes: post.like_count.unwrap_or(0) as u64,
+            replies: post.reply_count.unwrap_or(0) as u64,
+            reposts: post.repost_count.unwrap_or(0) as u64,
             reposted_by: match value.reason {
                 Some(Union::Refs(bsky::feed::defs::FeedViewPostReasonRefs::ReasonRepost(
                     repost,
@@ -135,6 +131,35 @@ impl From<FeedViewPost> for Post {
                 Some(Union::Refs(embed)) => Some(embed.into()),
                 _ => None,
             },
+        }
+    }
+}
+
+impl From<Box<bsky::embed::record::ViewRecord>> for Post {
+    fn from(value: Box<bsky::embed::record::ViewRecord>) -> Self {
+        Self {
+            author: value.author.into(),
+            content: match &value.value {
+                records::Record::Known(records::KnownRecord::AppBskyFeedPost(record)) => {
+                    record.text.clone()
+                }
+                _ => String::from("unimplemented!"),
+            },
+            likes: value.like_count.unwrap_or(0) as u64,
+            replies: value.reply_count.unwrap_or(0) as u64,
+            reposts: value.repost_count.unwrap_or(0) as u64,
+            reposted_by: None,
+            embed: value
+                .embeds
+                .and_then(|e| {
+                    e.into_iter()
+                        .filter_map(|e| match e {
+                            Union::Refs(e) => Some(e),
+                            _ => None,
+                        })
+                        .next()
+                })
+                .map(Into::into),
         }
     }
 }
@@ -214,28 +239,7 @@ impl From<bsky::embed::record::ViewRecordRefs> for EmbedRecord {
         match value {
             ViewNotFound(_) => Self::NotFound,
             ViewBlocked(_) => Self::Blocked,
-            ViewRecord(record) => Self::Post(Box::new(Post {
-                author: record.author.into(),
-                content: match record.value {
-                    records::Record::Known(records::KnownRecord::AppBskyFeedPost(record)) => {
-                        record.text.clone()
-                    }
-                    _ => String::from("unimplemented!"),
-                },
-                embed: record
-                    .embeds
-                    .and_then(|e| {
-                        e.into_iter()
-                            .filter_map(|e| match e {
-                                Union::Refs(e) => Some(e),
-                                _ => None,
-                            })
-                            .next()
-                    })
-                    .map(Into::into),
-                counts: None,
-                reposted_by: None,
-            })),
+            ViewRecord(record) => Self::Post(Box::new(Post::from(record))),
             _ => Self::Unimplemented,
         }
     }
@@ -287,7 +291,7 @@ impl<'a> Storeable<'a> for &'a Post {
                 Constraint::Length(2),
                 Constraint::Length(wrapped_content.len() as u16),
                 Constraint::Length(embed_height),
-                Constraint::Length(if self.counts.is_some() { 2 } else { 0 }),
+                Constraint::Length(2),
             ])
             .areas(Rect {
                 height: u16::MAX,
@@ -311,14 +315,12 @@ impl<'a> Storeable<'a> for &'a Post {
         if let Some(embed) = &self.embed {
             embed.store(embed_area, store);
         }
-        if let Some(counts) = &self.counts {
-            Paragraph::new(format!(
-                " {}    {}   ♥ {}",
-                counts.replies, counts.reposts, counts.likes
-            ))
-            .block(Block::new().padding(Padding::top(1)))
-            .store(footer_area, store);
-        }
+        Paragraph::new(format!(
+            " {}    {}   ♥ {}",
+            self.replies, self.reposts, self.likes
+        ))
+        .block(Block::new().padding(Padding::top(1)))
+        .store(footer_area, store);
     }
 }
 
