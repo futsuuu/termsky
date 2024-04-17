@@ -2,6 +2,7 @@ use ratatui::{prelude::*, widgets::*};
 
 pub struct Store<'a> {
     widgets: Vec<(Rect, Box<dyn WidgetRef + 'a>)>,
+    stored_area: Option<Rect>,
     pub scroll_v: i32,
     // Currently not needed
     // pub scroll_h: i32,
@@ -18,16 +19,14 @@ impl Store<'_> {
     pub fn new() -> Self {
         Self {
             widgets: Vec::new(),
+            stored_area: None,
             scroll_v: 0,
         }
     }
 
+    #[inline]
     pub fn stored_area(&self) -> Rect {
-        self.widgets
-            .iter()
-            .map(|(area, _widget)| *area)
-            .reduce(|acc, area| acc.union(area))
-            .unwrap_or_default()
+        self.stored_area.unwrap_or_default()
     }
 
     pub fn scroll_v(mut self, n: i32) -> Self {
@@ -72,14 +71,12 @@ impl WidgetRef for Store<'_> {
             })
         };
         let content = {
-            let Some(area_size) =
-                (content_area.width as usize).checked_mul(content_area.height as usize)
-            else {
-                panic!("stored widgets are too large");
-            };
+            let content_size = (content_area.width as usize)
+                .checked_mul(content_area.height as usize)
+                .expect("stored widgets are too large");
             let mut buf = Buffer {
                 area: content_area,
-                content: vec![ratatui::buffer::Cell::default(); area_size],
+                content: vec![ratatui::buffer::Cell::default(); content_size],
             };
             for (widget_area, widget) in &self.widgets {
                 if render_area.intersects(*widget_area) {
@@ -90,7 +87,8 @@ impl WidgetRef for Store<'_> {
         };
         for x in render_area.left()..render_area.right() {
             for y in render_area.top()..render_area.bottom() {
-                let ry = (y as u32).checked_add_signed(-self.scroll_v).unwrap() as u16;
+                // `render_area` already has `scroll_v` added
+                let ry = (y as i32 - self.scroll_v) as u16;
                 *buf.get_mut(x, ry) = content.get(x, y).clone();
             }
         }
@@ -100,6 +98,10 @@ impl WidgetRef for Store<'_> {
 impl<'a, W: WidgetRef + 'a> Storeable<'a> for W {
     fn store(self, area: Rect, store: &mut Store<'a>) {
         store.widgets.push((area, Box::new(self)));
+        store.stored_area = Some(match store.stored_area {
+            Some(stored_area) => stored_area.union(area),
+            None => area,
+        });
     }
 }
 

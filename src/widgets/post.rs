@@ -47,18 +47,16 @@ impl StatefulWidgetRef for Posts {
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let mut store = Store::new().scroll_v(self.scroll as i32);
-        let mut stored_height = 0;
         for post in &self.posts {
             // post
             post.store(
                 Rect {
-                    y: stored_height,
+                    y: store.stored_area().bottom(),
                     height: u16::MAX,
                     ..area
                 },
                 &mut store,
             );
-            stored_height = store.stored_area().height;
 
             // border
             Block::new()
@@ -66,13 +64,12 @@ impl StatefulWidgetRef for Posts {
                 .border_style(Style::new().blue().dim())
                 .store(
                     Rect {
-                        y: stored_height,
+                        y: store.stored_area().bottom(),
                         height: 1,
                         ..area
                     },
                     &mut store,
                 );
-            stored_height += 1;
         }
         state.blank_height = (self.scroll + area.height).checked_sub(store.stored_area().height);
         store.render_ref(area, buf);
