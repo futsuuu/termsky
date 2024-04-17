@@ -79,47 +79,37 @@ impl StatefulWidgetRef for Posts {
     }
 }
 
-#[derive(Debug)]
-struct Post {
-    author: Account,
-    content: String,
-    counts: Option<Counts>,
-    reposted_by: Option<Account>,
-    embed: Option<Embed>,
-}
-
-#[derive(Debug)]
-struct Account {
-    name: String,
-    opt_name: Option<String>,
-}
-
-#[derive(Debug)]
-struct Counts {
-    likes: u64,
-    replies: u64,
-    reposts: u64,
-}
-
-#[derive(Debug)]
-enum Embed {
-    External(bsky::embed::external::ViewExternal),
-    Image(Vec<EmbedImage>),
-    Record(EmbedRecord),
-    Unimplemented,
-}
-
-#[derive(Debug)]
-enum EmbedRecord {
-    NotFound,
-    Blocked,
-    Post(Box<Post>),
-    Unimplemented,
-}
-
-#[derive(Debug)]
-struct EmbedImage {
-    alt: String,
+nestify::nest! {
+    #[derive(Debug)]*
+    struct Post {
+        author: struct Account {
+            name: String,
+            opt_name: Option<String>,
+        },
+        content: String,
+        counts: Option<struct Counts {
+            likes: u64,
+            replies: u64,
+            reposts: u64,
+        }>,
+        reposted_by: Option<Account>,
+        embed: Option<enum Embed {
+            Media(enum EmbedMedia {
+                External(bsky::embed::external::ViewExternal),
+                Image(Vec<struct EmbedImage {
+                    alt: String,
+                }>),
+            }),
+            Record(enum EmbedRecord {
+                NotFound,
+                Blocked,
+                Post(Box<Post>),
+                Unimplemented,
+            }),
+            RecordWithMedia(EmbedRecord, EmbedMedia),
+            Unimplemented,
+        }>,
+    }
 }
 
 impl From<FeedViewPost> for Post {
@@ -172,17 +162,10 @@ impl From<bsky::feed::defs::PostViewEmbedRefs> for Embed {
     fn from(value: bsky::feed::defs::PostViewEmbedRefs) -> Self {
         use bsky::feed::defs::PostViewEmbedRefs::*;
         match value {
-            AppBskyEmbedExternalView(view) => Self::External(view.external),
-            AppBskyEmbedImagesView(view) => {
-                Self::Image(view.images.into_iter().map(Into::into).collect())
-            }
-            AppBskyEmbedRecordView(view) => {
-                let Union::Refs(refs) = view.record else {
-                    return Self::Unimplemented;
-                };
-                Self::Record(refs.into())
-            }
-            AppBskyEmbedRecordWithMediaView(_view) => Self::Unimplemented,
+            AppBskyEmbedExternalView(view) => EmbedMedia::from(view).into(),
+            AppBskyEmbedImagesView(view) => EmbedMedia::from(view).into(),
+            AppBskyEmbedRecordView(view) => view.into(),
+            AppBskyEmbedRecordWithMediaView(view) => view.into(),
         }
     }
 }
@@ -191,24 +174,40 @@ impl From<bsky::embed::record::ViewRecordEmbedsItem> for Embed {
     fn from(value: bsky::embed::record::ViewRecordEmbedsItem) -> Self {
         use bsky::embed::record::ViewRecordEmbedsItem::*;
         match value {
-            AppBskyEmbedExternalView(view) => Self::External(view.external),
-            AppBskyEmbedImagesView(view) => {
-                Self::Image(view.images.into_iter().map(Into::into).collect::<Vec<_>>())
-            }
-            AppBskyEmbedRecordView(view) => {
-                let Union::Refs(refs) = view.record else {
-                    return Self::Unimplemented;
-                };
-                Self::Record(refs.into())
-            }
-            _ => Self::Unimplemented,
+            AppBskyEmbedExternalView(view) => EmbedMedia::from(view).into(),
+            AppBskyEmbedImagesView(view) => EmbedMedia::from(view).into(),
+            AppBskyEmbedRecordView(view) => view.into(),
+            AppBskyEmbedRecordWithMediaView(view) => view.into(),
         }
     }
 }
 
-impl From<bsky::embed::images::ViewImage> for EmbedImage {
-    fn from(value: bsky::embed::images::ViewImage) -> Self {
-        Self { alt: value.alt }
+impl From<Box<bsky::embed::record::View>> for Embed {
+    fn from(value: Box<bsky::embed::record::View>) -> Self {
+        match value.record {
+            Union::Refs(refs) => Self::Record(refs.into()),
+            Union::Unknown(_) => Self::Unimplemented,
+        }
+    }
+}
+
+impl From<EmbedMedia> for Embed {
+    fn from(value: EmbedMedia) -> Self {
+        Self::Media(value)
+    }
+}
+
+impl From<Box<bsky::embed::record_with_media::View>> for Embed {
+    fn from(value: Box<bsky::embed::record_with_media::View>) -> Self {
+        let Union::Refs(record) = value.record.record else {
+            return Self::Unimplemented;
+        };
+        let record = EmbedRecord::from(record);
+        let Union::Refs(media) = value.media else {
+            return Self::Record(record);
+        };
+        let media = EmbedMedia::from(media);
+        Self::RecordWithMedia(record, media)
     }
 }
 
@@ -228,22 +227,48 @@ impl From<bsky::embed::record::ViewRecordRefs> for EmbedRecord {
                 },
                 embed: record
                     .embeds
-                    .map(|embeds| {
-                        embeds
-                            .into_iter()
+                    .and_then(|e| {
+                        e.into_iter()
                             .filter_map(|e| match e {
                                 Union::Refs(e) => Some(e),
                                 _ => None,
                             })
                             .next()
                     })
-                    .flatten()
                     .map(Into::into),
                 counts: None,
                 reposted_by: None,
             })),
             _ => Self::Unimplemented,
         }
+    }
+}
+
+impl From<bsky::embed::record_with_media::ViewMediaRefs> for EmbedMedia {
+    fn from(value: bsky::embed::record_with_media::ViewMediaRefs) -> Self {
+        use bsky::embed::record_with_media::ViewMediaRefs::*;
+        match value {
+            AppBskyEmbedImagesView(view) => view.into(),
+            AppBskyEmbedExternalView(view) => view.into(),
+        }
+    }
+}
+
+impl From<Box<bsky::embed::external::View>> for EmbedMedia {
+    fn from(value: Box<bsky::embed::external::View>) -> Self {
+        Self::External(value.external)
+    }
+}
+
+impl From<Box<bsky::embed::images::View>> for EmbedMedia {
+    fn from(value: Box<bsky::embed::images::View>) -> Self {
+        Self::Image(value.images.into_iter().map(Into::into).collect())
+    }
+}
+
+impl From<bsky::embed::images::ViewImage> for EmbedImage {
+    fn from(value: bsky::embed::images::ViewImage) -> Self {
+        Self { alt: value.alt }
     }
 }
 
@@ -303,40 +328,72 @@ impl<'a> Storeable<'a> for &'a Post {
 impl<'a> Storeable<'a> for &'a Embed {
     fn store(self, area: Rect, store: &mut Store<'a>) {
         match self {
-            Embed::Record(record) => match record {
-                EmbedRecord::Post(post) => {
-                    let block = embed_block();
-                    let post_area = block.inner(area);
-                    let mut s = Store::new();
-                    post.store(post_area, &mut s);
-                    let stored_area = s.stored_area();
-                    block.store(
-                        Rect {
-                            height: stored_area.height + 2,
-                            ..area
-                        },
-                        store,
-                    );
-                    s.store(stored_area, store);
-                }
-                EmbedRecord::NotFound => {
-                    Paragraph::new(" Not Found")
-                        .block(embed_block())
-                        .store(Rect { height: 3, ..area }, store);
-                }
-                EmbedRecord::Blocked => {
-                    Paragraph::new(" Blocked")
-                        .block(embed_block())
-                        .store(Rect { height: 3, ..area }, store);
-                }
-                EmbedRecord::Unimplemented => {
-                    Paragraph::new("unimplemented!")
-                        .block(embed_block())
-                        .store(Rect { height: 3, ..area }, store);
-                }
-            },
+            Embed::Record(record) => {
+                record.store(area, store);
+            }
+            Embed::Media(media) => {
+                media.store(area, store);
+            }
+            Embed::RecordWithMedia(record, media) => {
+                media.store(area, store);
+                record.store(
+                    Rect {
+                        y: store.stored_area().bottom(),
+                        ..area
+                    },
+                    store,
+                );
+            }
+            Embed::Unimplemented => {
+                Paragraph::new("unimplemented!")
+                    .block(embed_block())
+                    .store(Rect { height: 3, ..area }, store);
+            }
+        }
+    }
+}
 
-            Embed::External(external) => {
+impl<'a> Storeable<'a> for &'a EmbedRecord {
+    fn store(self, area: Rect, store: &mut Store<'a>) {
+        match self {
+            EmbedRecord::Post(post) => {
+                let block = embed_block();
+                let post_area = block.inner(area);
+                let mut s = Store::new();
+                post.store(post_area, &mut s);
+                let stored_area = s.stored_area();
+                block.store(
+                    Rect {
+                        height: stored_area.height + 2,
+                        ..area
+                    },
+                    store,
+                );
+                s.store(stored_area, store);
+            }
+            EmbedRecord::NotFound => {
+                Paragraph::new("  Not Found")
+                    .block(embed_block())
+                    .store(Rect { height: 3, ..area }, store);
+            }
+            EmbedRecord::Blocked => {
+                Paragraph::new("  Blocked")
+                    .block(embed_block())
+                    .store(Rect { height: 3, ..area }, store);
+            }
+            EmbedRecord::Unimplemented => {
+                Paragraph::new("unimplemented!")
+                    .block(embed_block())
+                    .store(Rect { height: 3, ..area }, store);
+            }
+        }
+    }
+}
+
+impl<'a> Storeable<'a> for &'a EmbedMedia {
+    fn store(self, area: Rect, store: &mut Store<'a>) {
+        match self {
+            EmbedMedia::External(external) => {
                 let block = embed_block();
                 let width = block.inner(area).width as usize;
                 let title = {
@@ -374,7 +431,7 @@ impl<'a> Storeable<'a> for &'a Embed {
                     .store(Rect { height, ..area }, store);
             }
 
-            Embed::Image(images) => {
+            EmbedMedia::Image(images) => {
                 let mut y = area.y;
                 for image in images {
                     let block = embed_block();
@@ -388,26 +445,17 @@ impl<'a> Storeable<'a> for &'a Embed {
                     y += height;
                 }
             }
-
-            Embed::Unimplemented => {
-                Paragraph::new("unimplemented!")
-                    .block(embed_block())
-                    .store(Rect { height: 3, ..area }, store);
-            }
         }
     }
 }
 
 fn wrap<'a>(text: &'a str, opts: impl Into<textwrap::Options<'a>>) -> Vec<Line<'a>> {
-    let wrapped = textwrap::wrap(text, opts);
-    if wrapped.len() == 1 && wrapped[0].is_empty() {
+    if text.is_empty() {
         return Vec::new();
     }
-    wrapped
+    textwrap::wrap(text, opts)
         .iter()
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .map(Line::from)
+        .map(|s| Line::from(s.to_string()))
         .collect()
 }
 
