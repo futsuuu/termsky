@@ -5,7 +5,7 @@ use ratatui::{prelude::*, widgets::*};
 
 use crate::{
     prelude::*,
-    widgets::{Posts, PostsState, Spinner},
+    widgets::{Posts, PostsState, Spinner, Tab, Tabs},
 };
 
 #[derive(Debug)]
@@ -59,23 +59,34 @@ impl Home {
 
 impl WidgetRef for Home {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let [_, area, _] = Layout::horizontal([
+        let [tabs_area, _, posts_area, _] = Layout::horizontal([
             Constraint::Fill(2),
-            Constraint::Fill(5),
+            Constraint::Fill(1),
+            Constraint::Fill(6),
             Constraint::Fill(2),
         ])
+        .horizontal_margin(1)
         .areas(area);
+
+        // tabs
+        Tabs {
+            tabs: vec![Tab::new("1. Login"), Tab::new("2. Home")],
+            selected: 1,
+        }
+        .render(tabs_area, buf);
+
+        // posts
         let mut posts_state = self.posts_state.borrow_mut();
+        self.posts.render_ref(posts_area, buf, &mut posts_state);
 
-        self.posts.render_ref(area, buf, &mut posts_state);
-
+        // spinner
         let Some(blank_height) = posts_state.blank_height else {
             return;
         };
         let blank_area = Rect {
             height: blank_height,
-            y: area.height - blank_height,
-            ..area
+            y: posts_area.height - blank_height,
+            ..posts_area
         };
         let [_, spinner_area] = Layout::vertical([
             Constraint::Length(14_u16.saturating_sub(blank_area.height)),
