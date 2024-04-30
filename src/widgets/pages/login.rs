@@ -2,8 +2,10 @@ use ratatui::{prelude::*, widgets::*};
 
 use crate::{
     prelude::*,
-    view,
-    widgets::{Spinner, TextArea},
+    widgets::{
+        atoms::{Spinner, TextArea},
+        pages,
+    },
 };
 
 #[derive(Debug)]
@@ -144,7 +146,7 @@ impl AppHandler for Login {
             if let Err(_e) = result {
                 self.unblock_input();
             } else {
-                app.update_view(view::Home::new());
+                app.update_view(pages::Home::new());
             }
         }
     }

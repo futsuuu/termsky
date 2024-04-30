@@ -1,7 +1,7 @@
 use anyhow::Result;
 use tracing::{event, Level};
 
-use crate::{prelude::*, view};
+use crate::{prelude::*, widgets::pages};
 
 pub struct App {
     running: bool,
@@ -44,7 +44,7 @@ pub trait Handler {
 #[tokio::main]
 pub async fn run() -> Result<()> {
     let mut app = App::new()?;
-    let mut view = View::Loading(view::Loading::new());
+    let mut view = View::Loading(pages::Loading::new());
 
     app.send(AtpRequest::GetSession);
 

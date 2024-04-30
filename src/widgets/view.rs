@@ -1,17 +1,12 @@
-mod home;
-mod loading;
-mod login;
-
 use std::fmt;
 
 use ratatui::{prelude::*, widgets::*};
 use tracing::{event, Level};
 
-use crate::prelude::*;
-
-pub use home::Home;
-pub use loading::Loading;
-pub use login::Login;
+use crate::{
+    prelude::*,
+    widgets::pages::{Home, Loading, Login},
+};
 
 pub enum View {
     Home(Home),

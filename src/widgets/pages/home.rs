@@ -5,7 +5,7 @@ use ratatui::{prelude::*, widgets::*};
 
 use crate::{
     prelude::*,
-    widgets::{Posts, PostsState, Spinner, Tab, Tabs},
+    widgets::{atoms::Spinner, Posts, PostsState, Tab, Tabs},
 };
 
 #[derive(Debug)]

@@ -15,7 +15,7 @@ use ratatui::prelude::*;
 use tokio::{sync::mpsc, task, time};
 use tracing::{event, Level};
 
-use crate::view::View;
+use crate::prelude::*;
 
 pub enum Event {
     Tick,
