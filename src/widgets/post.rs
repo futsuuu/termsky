@@ -5,7 +5,8 @@ use atrium_api::{
 };
 use ratatui::{prelude::*, widgets::*};
 
-use super::{Store, Storeable};
+use super::{atoms::Text, Store, Storeable};
+use crate::prelude::*;
 
 #[derive(Debug)]
 pub struct Posts {
@@ -49,25 +50,13 @@ impl StatefulWidgetRef for Posts {
         let mut store = Store::new().scroll_v(self.scroll as i32);
         for post in &self.posts {
             // post
-            post.store(
-                Rect {
-                    y: store.stored_area().bottom(),
-                    height: u16::MAX,
-                    ..area
-                },
-                &mut store,
-            );
-
+            post.store(store.bottom_space(area.height(u16::MAX)), &mut store);
             // border
             Block::new()
                 .borders(Borders::TOP)
                 .border_style(Style::new().blue().dim())
                 .store(
-                    Rect {
-                        y: store.stored_area().bottom(),
-                        height: 1,
-                        ..area
-                    },
+                    store.bottom_space(area.height(u16::MAX)).height(1),
                     &mut store,
                 );
         }
@@ -275,52 +264,29 @@ impl From<bsky::embed::images::ViewImage> for EmbedImage {
 
 impl<'a> Storeable<'a> for &'a Post {
     fn store(self, area: Rect, store: &mut Store<'a>) {
-        let wrapped_content = wrap(self.content.as_str(), area.width as usize);
-        let embed_height = self
-            .embed
-            .as_ref()
-            .map(|e| {
-                let mut store = Store::new();
-                e.store(area, &mut store);
-                store.stored_area().height
-            })
-            .unwrap_or_default();
-        let [repost_info_area, header_area, content_area, embed_area, footer_area] =
-            Layout::vertical([
-                Constraint::Length(if self.reposted_by.is_some() { 1 } else { 0 }),
-                Constraint::Length(2),
-                Constraint::Length(wrapped_content.len() as u16),
-                Constraint::Length(embed_height),
-                Constraint::Length(2),
-            ])
-            .areas(Rect {
-                height: u16::MAX,
-                ..area
-            });
-
         if let Some(reposted_by) = &self.reposted_by {
-            Span::from(format!("  Reposted by {}", reposted_by.name))
-                .store(repost_info_area, store);
+            Text::from(format!("  Reposted by {}", reposted_by.name))
+                .store(store.bottom_space(area).height(1), store);
         }
-        Paragraph::new({
+        Text::from_iter({
             let mut spans = vec![self.author.name.clone().bold()];
             if let Some(opt_name) = &self.author.opt_name {
                 spans.extend(["  ".into(), opt_name.clone().dim().italic()]);
             }
-            Line::from(spans)
+            spans
         })
         .block(Block::new().padding(Padding::bottom(1)))
-        .store(header_area, store);
-        Paragraph::new(wrapped_content).store(content_area, store);
+        .store(store.bottom_space(area).height(2), store);
+        Text::from(self.content.as_str()).store(store.bottom_space(area), store);
         if let Some(embed) = &self.embed {
-            embed.store(embed_area, store);
+            embed.store(store.bottom_space(area), store);
         }
-        Paragraph::new(format!(
+        Text::from(format!(
             " {}    {}   ♥ {}",
             self.replies, self.reposts, self.likes
         ))
         .block(Block::new().padding(Padding::top(1)))
-        .store(footer_area, store);
+        .store(store.bottom_space(area).height(2), store);
     }
 }
 
@@ -335,18 +301,13 @@ impl<'a> Storeable<'a> for &'a Embed {
             }
             Embed::RecordWithMedia(record, media) => {
                 media.store(area, store);
-                record.store(
-                    Rect {
-                        y: store.stored_area().bottom(),
-                        ..area
-                    },
-                    store,
-                );
+                record.store(store.bottom_space(area), store);
             }
             Embed::Unimplemented => {
-                Paragraph::new("unimplemented!")
-                    .block(embed_block())
-                    .store(Rect { height: 3, ..area }, store);
+                let area = area.height(3);
+                let block = embed_block();
+                Text::from("unimplemented!").store(block.inner(area), store);
+                block.store(area, store);
             }
         }
     }
@@ -360,30 +321,26 @@ impl<'a> Storeable<'a> for &'a EmbedRecord {
                 let post_area = block.inner(area);
                 let mut s = Store::new();
                 post.store(post_area, &mut s);
-                let stored_area = s.stored_area();
-                block.store(
-                    Rect {
-                        height: stored_area.height + 2,
-                        ..area
-                    },
-                    store,
-                );
-                s.store(stored_area, store);
+                block.store(area.height(s.stored_area().height + 2), store);
+                store.extend(s);
             }
             EmbedRecord::NotFound => {
-                Paragraph::new("  Not Found")
-                    .block(embed_block())
-                    .store(Rect { height: 3, ..area }, store);
+                let area = area.height(3);
+                let block = embed_block();
+                Text::from("  Not Found").store(block.inner(area), store);
+                block.store(area, store);
             }
             EmbedRecord::Blocked => {
-                Paragraph::new("  Blocked")
-                    .block(embed_block())
-                    .store(Rect { height: 3, ..area }, store);
+                let area = area.height(3);
+                let block = embed_block();
+                Text::from("  Blocked").store(block.inner(area), store);
+                block.store(area, store);
             }
             EmbedRecord::Unimplemented => {
-                Paragraph::new("unimplemented!")
-                    .block(embed_block())
-                    .store(Rect { height: 3, ..area }, store);
+                let area = area.height(3);
+                let block = embed_block();
+                Text::from("unimplemented!").store(block.inner(area), store);
+                block.store(area, store);
             }
         }
     }
@@ -394,68 +351,41 @@ impl<'a> Storeable<'a> for &'a EmbedMedia {
         match self {
             EmbedMedia::External(external) => {
                 let block = embed_block();
-                let width = block.inner(area).width as usize;
-                let title = {
-                    let mut title: Vec<_> = wrap(&external.title, width)
-                        .into_iter()
-                        .take(3)
-                        .map(|l| l.centered().style(Style::new().bold()))
-                        .collect();
-                    if !title.is_empty() {
-                        let title_width = title.iter().map(Line::width).max().unwrap_or_default();
-                        title.push(Line::from("▔".repeat(title_width)).centered())
-                    }
-                    title
-                };
-                let desc = {
-                    let mut desc: Vec<_> = wrap(&external.description, width)
-                        .into_iter()
-                        .take(3)
-                        .collect();
-                    if !desc.is_empty() {
-                        desc.push(Line::from(""));
-                    }
-                    desc
-                };
-                let uri = Line::from(external.uri.as_str()).style(Style::new().dim());
+                let inner = block.inner(area);
+                let mut s = Store::new();
 
-                let mut lines = Vec::new();
-                lines.extend(title);
-                lines.extend(desc);
-                lines.push(uri);
+                Text::from(external.title.as_str().bold())
+                    .alignment(Alignment::Center)
+                    .block(
+                        Block::new()
+                            .borders(Borders::BOTTOM)
+                            .border_set(ratatui::symbols::border::ONE_EIGHTH_WIDE),
+                    )
+                    .store(s.bottom_space(inner).height(4), &mut s);
+                Text::from(external.description.as_str())
+                    .block(Block::new().padding(Padding::bottom(1)))
+                    .store(s.bottom_space(inner).height(4), &mut s);
+                Text::from(external.uri.as_str().dim())
+                    .ignore_if_empty(false)
+                    .store(s.bottom_space(inner).height(1), &mut s);
 
-                let height = lines.len() as u16 + 2; // inner + border
-                Paragraph::new(lines)
-                    .block(block)
-                    .store(Rect { height, ..area }, store);
+                block.store(area.height(s.stored_area().height + 2), store);
+                store.extend(s);
             }
 
             EmbedMedia::Image(images) => {
-                let mut y = area.y;
                 for image in images {
                     let block = embed_block();
-                    let mut lines = vec![" ".magenta().into()];
-                    lines.extend(wrap(&image.alt, block.inner(area).width as usize));
-
-                    let height = lines.len() as u16 + 2;
-                    Paragraph::new(lines)
-                        .block(block)
-                        .store(Rect { y, height, ..area }, store);
-                    y += height;
+                    let inner = block.inner(area);
+                    let mut s = Store::new();
+                    Text::from_iter(["  ".magenta(), image.alt.clone().into()])
+                        .store(s.bottom_space(inner), &mut s);
+                    block.store(area.height(s.stored_area().height + 2), store);
+                    store.extend(s);
                 }
             }
         }
     }
-}
-
-fn wrap<'a>(text: &'a str, opts: impl Into<textwrap::Options<'a>>) -> Vec<Line<'a>> {
-    if text.is_empty() {
-        return Vec::new();
-    }
-    textwrap::wrap(text, opts)
-        .iter()
-        .map(|s| Line::from(s.to_string()))
-        .collect()
 }
 
 fn embed_block() -> Block<'static> {

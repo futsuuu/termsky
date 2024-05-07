@@ -29,4 +29,5 @@ textwrap = "0.16"
 nestify = "0.3"
 
 [dev-dependencies]
+rstest = { version = "0.19", default-features = false }
 indoc = "*"  # used in `ratatui::assert_buffer_eq`
