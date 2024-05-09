@@ -68,13 +68,7 @@ impl<'a> Text<'a> {
             let last_line = lines.last().map(|l| l.to_string()).unwrap_or_default();
 
             let content = format!("{last_line}{span}");
-            let mut wrapped = textwrap::wrap(&content, width);
-            // Restore trimmed trailing spaces to preserve space between each span.
-            if let Some(s) = wrapped.last_mut() {
-                let trimmed = trailing_space(span.content.as_ref());
-                *s = format!("{s}{trimmed}").into();
-            }
-
+            let wrapped = wrap_and_restore_trailing_space(&content, width);
             for (i, s) in wrapped.into_iter().enumerate() {
                 if i == 0 {
                     let Some(s) = s.strip_prefix(&last_line) else {
@@ -93,6 +87,15 @@ impl<'a> Text<'a> {
 
         trim_end(lines)
     }
+}
+
+fn wrap_and_restore_trailing_space(content: &str, width: usize) -> Vec<std::borrow::Cow<'_, str>> {
+    let mut wrapped = textwrap::wrap(content, width);
+    if let Some(s) = wrapped.last_mut() {
+        let trimmed = trailing_space(content);
+        *s = format!("{s}{trimmed}").into();
+    }
+    wrapped
 }
 
 fn trim_end(lines: Vec<Line>) -> Vec<Line> {
@@ -159,32 +162,39 @@ impl<'a> Storeable<'a> for Text<'a> {
         if area.is_empty() {
             return;
         }
-        if self.ignore_if_empty && self.spans.iter().map(Span::width).sum::<usize>() == 0 {
+        if self.ignore_if_empty && self.spans.iter().all(|s| s.width() == 0) {
             return;
         }
-        let block = self.block.clone().unwrap_or_default();
-        let inner = block.inner(area);
+        let inner = self
+            .block
+            .as_ref()
+            .map(|block| block.inner(area))
+            .unwrap_or(area);
         if inner.is_empty() {
-            block.store(area, store);
+            if let Some(block) = self.block {
+                block.store(area, store);
+            }
             return;
         }
         let lines = self.lines(inner.width as usize, inner.height as usize);
         let width = lines.iter().map(Line::width).max().unwrap_or_default() as u16;
         let height = lines.len() as u16;
-        block.store(
-            Rect {
-                x: area.x
-                    + match self.alignment {
-                        Some(Alignment::Left) | None => 0,
-                        Some(Alignment::Center) => (inner.width - width) / 2,
-                        Some(Alignment::Right) => inner.width - width,
-                    },
-                y: area.y,
-                height: area.height - (inner.height - height),
-                width: area.width - (inner.width - width),
-            },
-            store,
-        );
+        if let Some(block) = self.block {
+            block.store(
+                Rect {
+                    x: area.x
+                        + match self.alignment {
+                            Some(Alignment::Left) | None => 0,
+                            Some(Alignment::Center) => (inner.width - width) / 2,
+                            Some(Alignment::Right) => inner.width - width,
+                        },
+                    y: area.y,
+                    height: area.height - (inner.height - height),
+                    width: area.width - (inner.width - width),
+                },
+                store,
+            );
+        }
         lines.into_iter().enumerate().for_each(|(y, line)| {
             line.store(
                 Rect {
@@ -241,8 +251,8 @@ mod tests {
     #[case::no_wrap(15, Text::from_iter(["hello ", "world"]), vec![
         Line::from_iter(["hello ", "world"]),
     ])]
-    #[case::whitespace_span(15, Text::from_iter(["hello", "  ", "world"]), vec![
-        Line::from_iter(["hello", "  ", "world"]),
+    #[case::whitespace_span(15, Text::from_iter(["hello", " ", "  ", "world"]), vec![
+        Line::from_iter(["hello", " ", "  ", "world"]),
     ])]
     #[case::newline(10, Text::from("a\nhello"), vec![
         Line::from("a"),
