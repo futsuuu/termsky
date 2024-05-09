@@ -5,7 +5,7 @@ use ratatui::{prelude::*, widgets::*};
 
 use crate::{
     prelude::*,
-    widgets::{atoms::Spinner, Posts, PostsState, Tab, Tabs},
+    widgets::{atoms::Spinner, molecules::Tab, organisms::TabBar, Posts, PostsState},
 };
 
 #[derive(Debug)]
@@ -69,10 +69,11 @@ impl WidgetRef for Home {
         .areas(area);
 
         // tabs
-        Tabs {
-            tabs: vec![Tab::new("1. Login"), Tab::new("2. Home")],
-            selected: 1,
-        }
+        TabBar::from_iter([
+            Tab::new("1. Login"),
+            Tab::new("2. Home").selected(true),
+            Tab::new("3. Settings").active(false),
+        ])
         .render(tabs_area, buf);
 
         // posts
