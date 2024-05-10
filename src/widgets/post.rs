@@ -376,10 +376,11 @@ impl<'a> Storeable<'a> for &'a EmbedMedia {
             EmbedMedia::Image(images) => {
                 for image in images {
                     let block = embed_block();
+                    let area = store.bottom_space(area);
                     let inner = block.inner(area);
                     let mut s = Store::new();
                     Text::from_iter(["  ".magenta(), image.alt.clone().into()])
-                        .store(s.bottom_space(inner), &mut s);
+                        .store(inner, &mut s);
                     block.store(area.height(s.stored_area().height + 2), store);
                     store.extend(s);
                 }
