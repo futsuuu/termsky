@@ -1,6 +1,9 @@
 use ratatui::{prelude::*, widgets::*};
 
-use crate::widgets::{atoms::Text, Store, Storeable};
+use crate::widgets::{
+    atoms::{BlockExt, Text},
+    Store, Storeable,
+};
 
 #[derive(Clone)]
 pub struct Tab {
@@ -37,18 +40,18 @@ impl Storeable<'_> for Tab {
         } else {
             Style::new()
         };
-        Text::from_iter([
-            if self.selected {
-                ratatui::symbols::line::THICK_VERTICAL
-            } else {
-                " "
-            }
-            .blue(),
-            " ".into(),
-            self.text.clone().set_style(style),
-        ])
-        .block(Block::new().padding(Padding::vertical(1)))
-        .ignore_if_empty(false)
-        .store(area, store);
+        Block::new()
+            .padding(Padding::vertical(1))
+            .wrap_child(Text::from_iter([
+                if self.selected {
+                    ratatui::symbols::line::THICK_VERTICAL.blue()
+                } else {
+                    " ".into()
+                },
+                " ".into(),
+                self.text.clone().set_style(style),
+            ]))
+            .fit_vertical()
+            .store(area, store);
     }
 }

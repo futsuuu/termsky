@@ -1,4 +1,4 @@
-use ratatui::{prelude::*, widgets::Block};
+use ratatui::prelude::*;
 #[cfg(test)]
 use rstest::*;
 
@@ -7,7 +7,6 @@ use crate::widgets::{Store, Storeable};
 pub struct Text<'a> {
     spans: Vec<Span<'a>>,
     alignment: Option<Alignment>,
-    block: Option<Block<'a>>,
     ignore_if_empty: bool,
 }
 
@@ -16,7 +15,6 @@ impl<'a> Default for Text<'a> {
         Self {
             spans: Vec::new(),
             alignment: None,
-            block: None,
             ignore_if_empty: true,
         }
     }
@@ -48,11 +46,6 @@ impl<'a> Text<'a> {
         self
     }
 
-    pub fn block(mut self, block: Block<'a>) -> Self {
-        self.block = Some(block);
-        self
-    }
-
     pub fn ignore_if_empty(mut self, value: bool) -> Self {
         self.ignore_if_empty = value;
         self
@@ -75,10 +68,10 @@ impl<'a> Text<'a> {
                         continue;
                     };
                     let span = Span::styled(s.to_string(), span.style);
-                    lines = push_span(lines, span, self.alignment, false);
+                    lines = push_span(lines, span, false);
                 } else if lines.len() < max_height {
                     let span = Span::styled(s.to_string(), span.style);
-                    lines = push_span(lines, span, self.alignment, true);
+                    lines = push_span(lines, span, true);
                 } else {
                     return set_ellipsis(trim_end(lines));
                 }
@@ -110,17 +103,9 @@ fn trim_end(lines: Vec<Line>) -> Vec<Line> {
         .collect()
 }
 
-fn push_span<'a>(
-    mut lines: Vec<Line<'a>>,
-    span: Span<'a>,
-    alignment: Option<Alignment>,
-    new_line: bool,
-) -> Vec<Line<'a>> {
+fn push_span<'a>(mut lines: Vec<Line<'a>>, span: Span<'a>, new_line: bool) -> Vec<Line<'a>> {
     if new_line || lines.is_empty() {
-        lines.push(Line {
-            alignment: alignment,
-            ..Default::default()
-        });
+        lines.push(Line::default());
     }
     let last_line = lines.last_mut().unwrap();
     last_line.spans.push(span);
@@ -165,46 +150,24 @@ impl<'a> Storeable<'a> for Text<'a> {
         if self.ignore_if_empty && self.spans.iter().all(|s| s.width() == 0) {
             return;
         }
-        let inner = self
-            .block
-            .as_ref()
-            .map(|block| block.inner(area))
-            .unwrap_or(area);
-        if inner.is_empty() {
-            if let Some(block) = self.block {
-                block.store(area, store);
-            }
-            return;
-        }
-        let lines = self.lines(inner.width as usize, inner.height as usize);
-        let width = lines.iter().map(Line::width).max().unwrap_or_default() as u16;
-        let height = lines.len() as u16;
-        if let Some(block) = self.block {
-            block.store(
+        let lines = self.lines(area.width as usize, area.height as usize);
+        for (y, line) in lines.into_iter().enumerate() {
+            let width = line.width() as u16;
+            line.store(
                 Rect {
                     x: area.x
                         + match self.alignment {
                             Some(Alignment::Left) | None => 0,
-                            Some(Alignment::Center) => (inner.width - width) / 2,
-                            Some(Alignment::Right) => inner.width - width,
+                            Some(Alignment::Center) => (area.width - width) / 2,
+                            Some(Alignment::Right) => area.width - width,
                         },
-                    y: area.y,
-                    height: area.height - (inner.height - height),
-                    width: area.width - (inner.width - width),
+                    y: area.y + y as u16,
+                    width,
+                    height: 1,
                 },
                 store,
             );
         }
-        lines.into_iter().enumerate().for_each(|(y, line)| {
-            line.store(
-                Rect {
-                    y: inner.y + y as u16,
-                    height: 1,
-                    ..inner
-                },
-                store,
-            );
-        });
     }
 }
 
@@ -286,39 +249,5 @@ mod tests {
             .store(buf.area, &mut store);
         store.render(buf.area, &mut buf);
         assert_buffer_eq!(buf, Buffer::with_lines(vec!["   hello   "]));
-    }
-
-    #[rstest]
-    #[case::left(Alignment::Left, vec![
-        "┌─────┐    ",
-        "│hello│    ",
-        "│world│    ",
-        "└─────┘    ",
-        "           ",
-    ])]
-    #[case::center(Alignment::Center, vec![
-        "  ┌─────┐  ",
-        "  │hello│  ",
-        "  │world│  ",
-        "  └─────┘  ",
-        "           ",
-    ])]
-    #[case::right(Alignment::Right, vec![
-        "    ┌─────┐",
-        "    │hello│",
-        "    │world│",
-        "    └─────┘",
-        "           ",
-    ])]
-    fn alignment_with_block(#[case] alignment: Alignment, #[case] result: Vec<&str>) {
-        let mut store = Store::new();
-        let mut buf = Buffer::empty(Rect::new(0, 0, 11, 5));
-
-        Text::from_iter(["hello ", "world"])
-            .alignment(alignment)
-            .block(Block::bordered())
-            .store(buf.area, &mut store);
-        store.render(buf.area, &mut buf);
-        assert_buffer_eq!(buf, Buffer::with_lines(result));
     }
 }

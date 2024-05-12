@@ -5,8 +5,13 @@ use atrium_api::{
 };
 use ratatui::{prelude::*, widgets::*};
 
-use super::{atoms::Text, Store, Storeable};
-use crate::prelude::*;
+use crate::{
+    prelude::*,
+    widgets::{
+        atoms::{BlockExt, Text},
+        Store, Storeable,
+    },
+};
 
 #[derive(Debug)]
 pub struct Posts {
@@ -49,16 +54,12 @@ impl StatefulWidgetRef for Posts {
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let mut store = Store::new().scroll_v(self.scroll as i32);
         for post in &self.posts {
-            // post
-            post.store(store.bottom_space(area.height(u16::MAX)), &mut store);
-            // border
             Block::new()
-                .borders(Borders::TOP)
+                .borders(Borders::BOTTOM)
                 .border_style(Style::new().blue().dim())
-                .store(
-                    store.bottom_space(area.height(u16::MAX)).height(1),
-                    &mut store,
-                );
+                .wrap_child(post)
+                .fit_vertical()
+                .store(store.bottom_space(area.height(u16::MAX)), &mut store);
         }
         state.blank_height = (self.scroll + area.height).checked_sub(store.stored_area().height);
         store.render_ref(area, buf);
@@ -268,25 +269,29 @@ impl<'a> Storeable<'a> for &'a Post {
             Text::from(format!("  Reposted by {}", reposted_by.name))
                 .store(store.bottom_space(area).height(1), store);
         }
-        Text::from_iter({
-            let mut spans = vec![self.author.name.clone().bold()];
-            if let Some(opt_name) = &self.author.opt_name {
-                spans.extend(["  ".into(), opt_name.clone().dim().italic()]);
-            }
-            spans
-        })
-        .block(Block::new().padding(Padding::bottom(1)))
-        .store(store.bottom_space(area).height(2), store);
+        Block::new()
+            .padding(Padding::bottom(1))
+            .wrap_child(Text::from_iter({
+                let mut spans = vec![self.author.name.clone().bold()];
+                if let Some(opt_name) = &self.author.opt_name {
+                    spans.extend(["  ".into(), opt_name.clone().dim().italic()]);
+                }
+                spans
+            }))
+            .fit_vertical()
+            .store(store.bottom_space(area), store);
         Text::from(self.content.as_str()).store(store.bottom_space(area), store);
         if let Some(embed) = &self.embed {
             embed.store(store.bottom_space(area), store);
         }
-        Text::from(format!(
-            " {}    {}   ♥ {}",
-            self.replies, self.reposts, self.likes
-        ))
-        .block(Block::new().padding(Padding::top(1)))
-        .store(store.bottom_space(area).height(2), store);
+        Block::new()
+            .padding(Padding::top(1))
+            .wrap_child(Text::from(format!(
+                " {}    {}   ♥ {}",
+                self.replies, self.reposts, self.likes
+            )))
+            .fit_vertical()
+            .store(store.bottom_space(area), store);
     }
 }
 
@@ -304,10 +309,10 @@ impl<'a> Storeable<'a> for &'a Embed {
                 record.store(store.bottom_space(area), store);
             }
             Embed::Unimplemented => {
-                let area = area.height(3);
-                let block = embed_block();
-                Text::from("unimplemented!").store(block.inner(area), store);
-                block.store(area, store);
+                embed_block()
+                    .wrap_child(Text::from("unimplemented!"))
+                    .fit_vertical()
+                    .store(area, store);
             }
         }
     }
@@ -315,34 +320,15 @@ impl<'a> Storeable<'a> for &'a Embed {
 
 impl<'a> Storeable<'a> for &'a EmbedRecord {
     fn store(self, area: Rect, store: &mut Store<'a>) {
+        let block = embed_block();
         match self {
-            EmbedRecord::Post(post) => {
-                let block = embed_block();
-                let post_area = block.inner(area);
-                let mut s = Store::new();
-                post.store(post_area, &mut s);
-                block.store(area.height(s.stored_area().height + 2), store);
-                store.extend(s);
-            }
-            EmbedRecord::NotFound => {
-                let area = area.height(3);
-                let block = embed_block();
-                Text::from("  Not Found").store(block.inner(area), store);
-                block.store(area, store);
-            }
-            EmbedRecord::Blocked => {
-                let area = area.height(3);
-                let block = embed_block();
-                Text::from("  Blocked").store(block.inner(area), store);
-                block.store(area, store);
-            }
-            EmbedRecord::Unimplemented => {
-                let area = area.height(3);
-                let block = embed_block();
-                Text::from("unimplemented!").store(block.inner(area), store);
-                block.store(area, store);
-            }
+            EmbedRecord::Post(post) => block.wrap_child(post.as_ref()),
+            EmbedRecord::NotFound => block.wrap_child(Text::from("  Not Found")),
+            EmbedRecord::Blocked => block.wrap_child(Text::from("  Blocked")),
+            EmbedRecord::Unimplemented => block.wrap_child(Text::from("unimplemented!")),
         }
+        .fit_vertical()
+        .store(area, store);
     }
 }
 
@@ -350,39 +336,35 @@ impl<'a> Storeable<'a> for &'a EmbedMedia {
     fn store(self, area: Rect, store: &mut Store<'a>) {
         match self {
             EmbedMedia::External(external) => {
-                let block = embed_block();
-                let inner = block.inner(area);
-                let mut s = Store::new();
-
-                Text::from(external.title.as_str().bold())
-                    .alignment(Alignment::Center)
-                    .block(
+                embed_block()
+                    .wrap(|inner, s| {
                         Block::new()
                             .borders(Borders::BOTTOM)
-                            .border_set(ratatui::symbols::border::ONE_EIGHTH_WIDE),
-                    )
-                    .store(s.bottom_space(inner).height(4), &mut s);
-                Text::from(external.description.as_str())
-                    .block(Block::new().padding(Padding::bottom(1)))
-                    .store(s.bottom_space(inner).height(4), &mut s);
-                Text::from(external.uri.as_str().dim())
-                    .ignore_if_empty(false)
-                    .store(s.bottom_space(inner).height(1), &mut s);
-
-                block.store(area.height(s.stored_area().height + 2), store);
-                store.extend(s);
+                            .border_set(ratatui::symbols::border::ONE_EIGHTH_WIDE)
+                            .wrap_child(
+                                Text::from(external.title.as_str().bold())
+                                    .alignment(Alignment::Center),
+                            )
+                            .fit_all()
+                            .store(s.bottom_space(inner), s);
+                        Block::new()
+                            .padding(Padding::bottom(1))
+                            .wrap_child(Text::from(external.description.as_str()))
+                            .fit_vertical()
+                            .store(s.bottom_space(inner), s);
+                        Text::from(external.uri.as_str().dim())
+                            .ignore_if_empty(false)
+                            .store(s.bottom_space(inner), s);
+                    })
+                    .fit_vertical()
+                    .store(area, store);
             }
-
             EmbedMedia::Image(images) => {
                 for image in images {
-                    let block = embed_block();
-                    let area = store.bottom_space(area);
-                    let inner = block.inner(area);
-                    let mut s = Store::new();
-                    Text::from_iter(["  ".magenta(), image.alt.clone().into()])
-                        .store(inner, &mut s);
-                    block.store(area.height(s.stored_area().height + 2), store);
-                    store.extend(s);
+                    embed_block()
+                        .wrap_child(Text::from_iter(["  ".magenta(), image.alt.clone().into()]))
+                        .fit_vertical()
+                        .store(store.bottom_space(area), store);
                 }
             }
         }
