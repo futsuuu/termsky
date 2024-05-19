@@ -73,16 +73,20 @@ nestify::nest! {
             name: String,
             opt_name: Option<String>,
         },
-        content: String,
+        content: Text,
         likes: u64,
         replies: u64,
         reposts: u64,
         reposted_by: Option<Account>,
         embed: Option<enum Embed {
             Media(enum EmbedMedia {
-                External(bsky::embed::external::ViewExternal),
+                External(struct EmbedExternal {
+                    title: Text,
+                    description: Text,
+                    uri: Text,
+                }),
                 Image(Vec<struct EmbedImage {
-                    alt: String,
+                    alt: Text,
                 }>),
             }),
             Record(enum EmbedRecord {
@@ -104,9 +108,9 @@ impl From<FeedViewPost> for Post {
             author: post.author.clone().into(),
             content: match &post.record {
                 records::Record::Known(records::KnownRecord::AppBskyFeedPost(record)) => {
-                    record.text.clone()
+                    record.text.clone().into()
                 }
-                _ => String::from("unimplemented!"),
+                _ => "unimplemented!".into(),
             },
             likes: post.like_count.unwrap_or(0) as u64,
             replies: post.reply_count.unwrap_or(0) as u64,
@@ -131,9 +135,9 @@ impl From<Box<bsky::embed::record::ViewRecord>> for Post {
             author: value.author.into(),
             content: match &value.value {
                 records::Record::Known(records::KnownRecord::AppBskyFeedPost(record)) => {
-                    record.text.clone()
+                    record.text.clone().into()
                 }
-                _ => String::from("unimplemented!"),
+                _ => "unimplemented!".into(),
             },
             likes: value.like_count.unwrap_or(0) as u64,
             replies: value.reply_count.unwrap_or(0) as u64,
@@ -142,12 +146,10 @@ impl From<Box<bsky::embed::record::ViewRecord>> for Post {
             embed: value
                 .embeds
                 .and_then(|e| {
-                    e.into_iter()
-                        .filter_map(|e| match e {
-                            Union::Refs(e) => Some(e),
-                            _ => None,
-                        })
-                        .next()
+                    e.into_iter().find_map(|e| match e {
+                        Union::Refs(e) => Some(e),
+                        _ => None,
+                    })
                 })
                 .map(Into::into),
         }
@@ -247,7 +249,7 @@ impl From<bsky::embed::record_with_media::ViewMediaRefs> for EmbedMedia {
 
 impl From<Box<bsky::embed::external::View>> for EmbedMedia {
     fn from(value: Box<bsky::embed::external::View>) -> Self {
-        Self::External(value.external)
+        Self::External(value.external.into())
     }
 }
 
@@ -257,9 +259,21 @@ impl From<Box<bsky::embed::images::View>> for EmbedMedia {
     }
 }
 
+impl From<bsky::embed::external::ViewExternal> for EmbedExternal {
+    fn from(value: bsky::embed::external::ViewExternal) -> Self {
+        Self {
+            title: Text::from(value.title.bold()).alignment(Alignment::Center),
+            description: Text::from(value.description),
+            uri: Text::from(value.uri.dim()).ignore_if_empty(false),
+        }
+    }
+}
+
 impl From<bsky::embed::images::ViewImage> for EmbedImage {
     fn from(value: bsky::embed::images::ViewImage) -> Self {
-        Self { alt: value.alt }
+        Self {
+            alt: Text::from_iter(["  ".magenta(), value.alt.into()]),
+        }
     }
 }
 
@@ -280,7 +294,7 @@ impl<'a> Storeable<'a> for &'a Post {
             }))
             .fit_vertical()
             .store(store.bottom_space(area), store);
-        Text::from(self.content.as_str()).store(store.bottom_space(area), store);
+        self.content.clone().store(store.bottom_space(area), store);
         if let Some(embed) = &self.embed {
             embed.store(store.bottom_space(area), store);
         }
@@ -341,20 +355,15 @@ impl<'a> Storeable<'a> for &'a EmbedMedia {
                         Block::new()
                             .borders(Borders::BOTTOM)
                             .border_set(ratatui::symbols::border::ONE_EIGHTH_WIDE)
-                            .wrap_child(
-                                Text::from(external.title.as_str().bold())
-                                    .alignment(Alignment::Center),
-                            )
+                            .wrap_child(external.title.clone())
                             .fit_all()
-                            .store(s.bottom_space(inner), s);
+                            .store(s.bottom_space(inner).height(3), s);
                         Block::new()
                             .padding(Padding::bottom(1))
-                            .wrap_child(Text::from(external.description.as_str()))
+                            .wrap_child(external.description.clone())
                             .fit_vertical()
-                            .store(s.bottom_space(inner), s);
-                        Text::from(external.uri.as_str().dim())
-                            .ignore_if_empty(false)
-                            .store(s.bottom_space(inner), s);
+                            .store(s.bottom_space(inner).height(3), s);
+                        external.uri.clone().store(s.bottom_space(inner).height(1), s);
                     })
                     .fit_vertical()
                     .store(area, store);
@@ -362,7 +371,7 @@ impl<'a> Storeable<'a> for &'a EmbedMedia {
             EmbedMedia::Image(images) => {
                 for image in images {
                     embed_block()
-                        .wrap_child(Text::from_iter(["  ".magenta(), image.alt.clone().into()]))
+                        .wrap_child(image.alt.clone())
                         .fit_vertical()
                         .store(store.bottom_space(area), store);
                 }

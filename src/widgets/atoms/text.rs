@@ -1,46 +1,61 @@
+use std::{cell::RefCell, fmt::Display, ops::Deref, rc::Rc};
+
 use ratatui::prelude::*;
 #[cfg(test)]
 use rstest::*;
 
 use crate::widgets::{Store, Storeable};
 
-pub struct Text<'a> {
-    spans: Vec<Span<'a>>,
+#[derive(Clone, Debug)]
+pub struct Text {
+    spans: Rc<Vec<SharedSpan>>,
     alignment: Option<Alignment>,
     ignore_if_empty: bool,
+    wrap_cache: Rc<RefCell<WrapCache>>,
 }
 
-impl<'a> Default for Text<'a> {
+#[derive(Debug, Default)]
+struct WrapCache {
+    width: u16,
+    height: u16,
+    lines: Vec<Line<'static>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SharedSpan(Rc<Span<'static>>);
+
+impl Default for Text {
     fn default() -> Self {
         Self {
-            spans: Vec::new(),
+            spans: Rc::new(Vec::with_capacity(0)),
             alignment: None,
             ignore_if_empty: true,
+            wrap_cache: Rc::new(RefCell::new(WrapCache::default())),
         }
     }
 }
 
 const ELLIPSIS: char = '…';
 
-impl<'a, S: Into<Span<'a>>> From<S> for Text<'a> {
+impl<S: Into<SharedSpan>> From<S> for Text {
     fn from(value: S) -> Self {
         Self {
-            spans: vec![value.into()],
+            spans: Rc::new(vec![value.into()]),
             ..Default::default()
         }
     }
 }
 
-impl<'a, S: Into<Span<'a>>> FromIterator<S> for Text<'a> {
+impl<S: Into<SharedSpan>> FromIterator<S> for Text {
     fn from_iter<I: IntoIterator<Item = S>>(iter: I) -> Self {
         Self {
-            spans: iter.into_iter().map(Into::into).collect(),
+            spans: Rc::new(iter.into_iter().map(Into::into).collect()),
             ..Default::default()
         }
     }
 }
 
-impl<'a> Text<'a> {
+impl Text {
     pub fn alignment(mut self, alignment: Alignment) -> Self {
         self.alignment = Some(alignment);
         self
@@ -51,13 +66,13 @@ impl<'a> Text<'a> {
         self
     }
 
-    fn lines<'b>(&self, width: usize, max_height: usize) -> Vec<Line<'a>> {
+    fn lines(&self, width: usize, max_height: usize) -> Vec<Line<'static>> {
         if max_height == 0 {
             return Vec::with_capacity(0);
         }
         let mut lines: Vec<Line> = Vec::new();
 
-        for span in &self.spans {
+        for span in self.spans.as_ref() {
             let last_line = lines.last().map(|l| l.to_string()).unwrap_or_default();
 
             let content = format!("{last_line}{span}");
@@ -79,6 +94,25 @@ impl<'a> Text<'a> {
         }
 
         trim_end(lines)
+    }
+}
+
+impl<S: Into<Span<'static>>> From<S> for SharedSpan {
+    fn from(value: S) -> Self {
+        Self(Rc::new(value.into()))
+    }
+}
+
+impl Deref for SharedSpan {
+    type Target = Rc<Span<'static>>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl Display for SharedSpan {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(self.0.as_ref(), f)
     }
 }
 
@@ -112,7 +146,7 @@ fn push_span<'a>(mut lines: Vec<Line<'a>>, span: Span<'a>, new_line: bool) -> Ve
     lines
 }
 
-fn set_ellipsis<'a>(mut lines: Vec<Line<'a>>) -> Vec<Line<'a>> {
+fn set_ellipsis(mut lines: Vec<Line<'_>>) -> Vec<Line<'_>> {
     let Some(last_line) = lines.last_mut() else {
         return lines;
     };
@@ -123,10 +157,10 @@ fn set_ellipsis<'a>(mut lines: Vec<Line<'a>>) -> Vec<Line<'a>> {
     s.pop();
     s.push(ELLIPSIS);
     last_span.content = s.into();
-    return lines;
+    lines
 }
 
-fn trailing_space<'a>(s: &'a str) -> &'a str {
+fn trailing_space(s: &str) -> &str {
     s.rsplit_once(|c: char| !c.is_whitespace() || c.is_control())
         .map(|(_, s)| s)
         .unwrap_or(s)
@@ -142,7 +176,7 @@ fn test_trailing_space(#[case] from: &str, #[case] to: &str) {
     assert_eq!(to, trailing_space(from));
 }
 
-impl<'a> Storeable<'a> for Text<'a> {
+impl<'a> Storeable<'a> for Text {
     fn store(self, area: Rect, store: &mut Store<'a>) {
         if area.is_empty() {
             return;
@@ -150,10 +184,17 @@ impl<'a> Storeable<'a> for Text<'a> {
         if self.ignore_if_empty && self.spans.iter().all(|s| s.width() == 0) {
             return;
         }
-        let lines = self.lines(area.width as usize, area.height as usize);
-        for (y, line) in lines.into_iter().enumerate() {
+        {
+            let mut cache = self.wrap_cache.borrow_mut();
+            if cache.width != area.width || cache.height != area.height {
+                cache.width = area.width;
+                cache.height = area.height;
+                cache.lines = self.lines(area.width as usize, area.height as usize);
+            }
+        }
+        for (y, line) in self.wrap_cache.borrow().lines.iter().enumerate() {
             let width = line.width() as u16;
-            line.store(
+            line.clone().store(
                 Rect {
                     x: area.x
                         + match self.alignment {
@@ -196,7 +237,7 @@ mod tests {
                 Line::from("hello"),
                 Line::from(ellipsis!("hell")),
             ],
-            Text::from_iter(["hello ", "hello ", "hello ", "hello"]).lines(7, 3)
+            Text::from_iter(["hello ", "hello ", "hello ", "hello",]).lines(7, 3)
         );
     }
 
