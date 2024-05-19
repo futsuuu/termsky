@@ -214,7 +214,7 @@ impl<'a> Storeable<'a> for Text {
 
 #[cfg(test)]
 mod tests {
-    use ratatui::assert_buffer_eq;
+    use ratatui::backend::TestBackend;
     use rstest::*;
 
     use super::*;
@@ -272,23 +272,27 @@ mod tests {
 
     #[test]
     fn one_word() {
-        let mut store = Store::new();
-        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 1));
-
-        Text::from("hello").store(buf.area, &mut store);
-        store.render(buf.area, &mut buf);
-        assert_buffer_eq!(buf, Buffer::with_lines(vec!["hello     "]));
+        let mut t = Terminal::new(TestBackend::new(10, 1)).unwrap();
+        t.draw(|f| {
+            let mut store = Store::new();
+            Text::from("hello").store(f.size(), &mut store);
+            f.render_widget(&store, f.size());
+        })
+        .unwrap();
+        t.backend().assert_buffer_lines(["hello     "]);
     }
 
     #[test]
     fn alignment() {
-        let mut store = Store::new();
-        let mut buf = Buffer::empty(Rect::new(0, 0, 11, 1));
-
-        Text::from("hello")
-            .alignment(Alignment::Center)
-            .store(buf.area, &mut store);
-        store.render(buf.area, &mut buf);
-        assert_buffer_eq!(buf, Buffer::with_lines(vec!["   hello   "]));
+        let mut t = Terminal::new(TestBackend::new(11, 1)).unwrap();
+        t.draw(|f| {
+            let mut store = Store::new();
+            Text::from("hello")
+                .alignment(Alignment::Center)
+                .store(f.size(), &mut store);
+            f.render_widget(&store, f.size());
+        })
+        .unwrap();
+        t.backend().assert_buffer_lines(["   hello   "]);
     }
 }

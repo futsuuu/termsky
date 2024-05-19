@@ -116,9 +116,9 @@ impl<'a, W: WidgetRef + 'a> Storeable<'a> for W {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use ratatui::backend::TestBackend;
 
-    use ratatui::assert_buffer_eq;
+    use super::*;
 
     #[test]
     fn stored_area() {
@@ -139,81 +139,77 @@ mod tests {
 
     #[test]
     fn render_widgets() {
-        let mut store = Store::new();
-        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 5));
-
-        Span::from("hello").store(Rect::new(0, 0, 5, 1), &mut store);
-        Span::from("world").store(Rect::new(7, 4, 5, 1), &mut store);
-        store.render(buf.area, &mut buf);
-        assert_buffer_eq!(
-            buf,
-            Buffer::with_lines(vec![
-                "hello     ",
-                "          ",
-                "          ",
-                "          ",
-                "       wor",
-            ])
-        );
+        let mut t = Terminal::new(TestBackend::new(10, 5)).unwrap();
+        t.draw(|f| {
+            let mut store = Store::new();
+            Span::from("hello").store(Rect::new(0, 0, 5, 1), &mut store);
+            Span::from("world").store(Rect::new(7, 4, 5, 1), &mut store);
+            f.render_widget(&store, f.size());
+        })
+        .unwrap();
+        t.backend().assert_buffer_lines([
+            "hello     ",
+            "          ",
+            "          ",
+            "          ",
+            "       wor",
+        ])
     }
 
     #[test]
     fn render_small_widget() {
-        let mut store = Store::new();
-        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 5));
-
-        Span::from("#").store(Rect::new(4, 2, 2, 1), &mut store);
-        store.render(buf.area, &mut buf);
-        assert_buffer_eq!(
-            buf,
-            Buffer::with_lines(vec![
-                "          ",
-                "          ",
-                "    #     ",
-                "          ",
-                "          ",
-            ])
-        );
+        let mut t = Terminal::new(TestBackend::new(10, 5)).unwrap();
+        t.draw(|f| {
+            let mut store = Store::new();
+            Span::from("#").store(Rect::new(4, 2, 2, 1), &mut store);
+            f.render_widget(&store, f.size());
+        })
+        .unwrap();
+        t.backend().assert_buffer_lines([
+            "          ",
+            "          ",
+            "    #     ",
+            "          ",
+            "          ",
+        ]);
     }
 
     #[test]
     fn scroll_vertical_positive() {
-        let mut store = Store::new().scroll_v(2);
-        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 5));
-
-        Span::from("11").store(Rect::new(4, 1, 2, 1), &mut store);
-        Span::from("22").store(Rect::new(4, 2, 2, 1), &mut store);
-        store.render(buf.area, &mut buf);
-        assert_buffer_eq!(
-            buf,
-            Buffer::with_lines(vec![
-                "    22    ",
-                "          ",
-                "          ",
-                "          ",
-                "          ",
-            ])
-        );
+        let mut t = Terminal::new(TestBackend::new(10, 5)).unwrap();
+        t.draw(|f| {
+            let mut store = Store::new().scroll_v(2);
+            Span::from("11").store(Rect::new(4, 1, 2, 1), &mut store);
+            Span::from("22").store(Rect::new(4, 2, 2, 1), &mut store);
+            f.render_widget(&store, f.size());
+        })
+        .unwrap();
+        t.backend().assert_buffer_lines([
+            "    22    ",
+            "          ",
+            "          ",
+            "          ",
+            "          ",
+        ]);
     }
 
     #[test]
     fn scroll_vertical_negative() {
-        let mut store = Store::new().scroll_v(-2);
-        let mut buf = Buffer::empty(Rect::new(0, 0, 10, 5));
-
-        Span::from("11").store(Rect::new(4, 2, 2, 1), &mut store);
-        Span::from("22").store(Rect::new(4, 3, 2, 1), &mut store);
-        store.render(buf.area, &mut buf);
-        assert_buffer_eq!(
-            buf,
-            Buffer::with_lines(vec![
-                "          ",
-                "          ",
-                "          ",
-                "          ",
-                "    11    ",
-            ])
-        );
+        let mut t = Terminal::new(TestBackend::new(10, 5)).unwrap();
+        t.draw(|f| {
+            let mut store = Store::new().scroll_v(-2);
+            Span::from("11").store(Rect::new(4, 2, 2, 1), &mut store);
+            Span::from("22").store(Rect::new(4, 3, 2, 1), &mut store);
+            f.render_widget(&store, f.size());
+        })
+        .unwrap();
+        t.backend().assert_buffer_lines([
+            "          ",
+            "          ",
+            "          ",
+            "          ",
+            "    11    ",
+        ]);
     }
 }
 

@@ -26,6 +26,7 @@ impl<'a> BlockExt<'a> for Block<'a> {
 
 pub struct Wrapper<'a> {
     block: Block<'a>,
+    #[allow(clippy::type_complexity)]
     func: Box<dyn FnOnce(Rect, &mut Store<'a>) + 'a>,
     fit: Fit,
 }
