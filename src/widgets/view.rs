@@ -39,14 +39,6 @@ impl AppHandler for View {
             View::Login(v) => v.tui_event(app, ev),
         }
     }
-
-    fn atp_response(&mut self, app: &mut App, res: AtpResponse) {
-        match self {
-            View::Home(v) => v.atp_response(app, res),
-            View::Loading(v) => v.atp_response(app, res),
-            View::Login(v) => v.atp_response(app, res),
-        }
-    }
 }
 
 macro_rules! impl_from {

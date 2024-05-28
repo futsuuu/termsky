@@ -6,7 +6,7 @@ use crate::{prelude::*, widgets::pages};
 pub struct App {
     running: bool,
     new_view: Option<View>,
-    atp: Atp,
+    pub atp: Atp,
     tui: Tui,
 }
 
@@ -27,39 +27,24 @@ impl App {
     pub fn exit(&mut self) {
         self.running = false;
     }
-
-    pub fn send(&mut self, req: AtpRequest) {
-        if self.atp.send(req).is_err() {
-            self.exit();
-        }
-    }
 }
 
 pub trait Handler {
     #![allow(unused_variables)]
     fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {}
-    fn atp_response(&mut self, app: &mut App, res: AtpResponse) {}
 }
 
-#[tokio::main]
 pub async fn run() -> Result<()> {
     let mut app = App::new()?;
     let mut view = View::Loading(pages::Loading::new());
 
-    app.send(AtpRequest::GetSession);
-
     event!(Level::INFO, "start main loop");
     while app.running {
         app.tui.render(&view)?;
-        tokio::select! {
-            Some(event) = app.tui.event() => {
-                view.tui_event(&mut app, event);
-            }
-            Some(res) = app.atp.recv() => {
-                view.atp_response(&mut app, res);
-            }
-            else => break,
+        let Some(event) = app.tui.event().await else {
+            break;
         };
+        view.tui_event(&mut app, event);
         if let Some(new_view) = app.new_view.take() {
             view.update(new_view);
         }

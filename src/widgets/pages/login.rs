@@ -1,6 +1,7 @@
 use ratatui::{prelude::*, widgets::*};
 
 use crate::{
+    atp::Response,
     prelude::*,
     widgets::{
         atoms::{Spinner, TextArea},
@@ -12,7 +13,7 @@ use crate::{
 pub struct Login {
     textareas: [TextArea<'static>; 2],
     focus: Option<usize>,
-    block_input: bool,
+    response: Response<crate::atp::LoginResult>,
 }
 
 impl Default for Login {
@@ -29,7 +30,7 @@ impl Login {
                 TextArea::new(" Password ", true),
             ],
             focus: None,
-            block_input: true,
+            response: Response::empty(),
         }
     }
 
@@ -41,14 +42,14 @@ impl Login {
     }
 
     pub fn textarea(&mut self) -> Option<&mut TextArea<'static>> {
-        if self.block_input {
+        if self.response.is_loading() {
             return None;
         }
         self.focus.map(|n| &mut self.textareas[n])
     }
 
     pub fn switch_focus(&mut self) {
-        if self.block_input {
+        if self.response.is_loading() {
             return;
         }
         if let Some(n) = self.focus {
@@ -75,16 +76,6 @@ impl Login {
     pub fn has_focus(&self) -> bool {
         self.focus.is_some()
     }
-
-    pub fn block_input(&mut self) {
-        self.block_input = true;
-        self.lose_focus();
-    }
-
-    pub fn unblock_input(&mut self) {
-        self.block_input = false;
-        self.switch_focus();
-    }
 }
 
 impl WidgetRef for Login {
@@ -107,7 +98,7 @@ impl WidgetRef for Login {
 
         self.textareas[0].widget().render(ident, buf);
         self.textareas[1].widget().render(passwd, buf);
-        if self.block_input {
+        if self.response.is_loading() {
             Spinner::new().render(spinner, buf);
         }
     }
@@ -115,6 +106,15 @@ impl WidgetRef for Login {
 
 impl AppHandler for Login {
     fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+        if let Some(result) = self.response.take_data() {
+            if result.is_ok() {
+                app.update_view(pages::Home::new());
+            } else {
+                self.switch_focus();
+            }
+            return;
+        }
+
         if let TuiEvent::Key(ev) = ev {
             if ev.code == KeyCode::Esc {
                 if self.has_focus() {
@@ -127,27 +127,14 @@ impl AppHandler for Login {
                 self.switch_focus();
                 return;
             } else if ev.code == KeyCode::Enter && self.textarea().is_some() {
-                app.send(AtpRequest::Login {
-                    ident: self.ident(),
-                    passwd: self.passwd(),
-                });
-                self.block_input();
+                self.response = app.atp.login(self.ident(), self.passwd());
+                self.lose_focus();
                 return;
             }
         }
 
         if let Some(ref mut textarea) = self.textarea() {
             textarea.input(ev);
-        }
-    }
-
-    fn atp_response(&mut self, app: &mut App, res: AtpResponse) {
-        if let AtpResponse::Login(result) = res {
-            if let Err(_e) = result {
-                self.unblock_input();
-            } else {
-                app.update_view(pages::Home::new());
-            }
         }
     }
 }

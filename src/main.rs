@@ -5,10 +5,11 @@ mod tui;
 mod utils;
 mod widgets;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     utils::init()?;
     tui::enter()?;
-    app::run()?;
+    app::run().await?;
     tui::exit()?;
     Ok(())
 }
