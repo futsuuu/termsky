@@ -2,52 +2,10 @@ use std::cell::RefCell;
 
 use tokio::sync::oneshot;
 
-/// A simple wrapper of [`tokio::sync::oneshot::Receiver`]
+/// A simple wrapper of [`tokio::sync::oneshot::Receiver`].
 #[derive(Debug)]
 pub struct Response<T> {
     inner: Option<RefCell<Inner<T>>>,
-}
-
-impl<T: Send + 'static> Response<T> {
-    pub fn new(future: impl std::future::Future<Output = T> + Send + 'static) -> Self {
-        let (tx, rx) = oneshot::channel();
-        tokio::spawn(async {
-            tx.send(future.await).ok();
-        });
-        Self::from(rx)
-    }
-
-    pub fn empty() -> Self {
-        Self { inner: None }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.inner.is_none()
-    }
-
-    pub fn is_loading(&self) -> bool {
-        self.inner
-            .as_ref()
-            .map_or(false, |r| r.borrow_mut().is_loading())
-    }
-
-    // pub fn is_closed(&self) -> bool {
-    //     self.inner
-    //         .as_ref()
-    //         .map_or(false, |r| r.borrow_mut().is_closed())
-    // }
-
-    pub fn take_data(&self) -> Option<T> {
-        self.inner.as_ref()?.borrow_mut().take_data()
-    }
-}
-
-impl<T> From<oneshot::Receiver<T>> for Response<T> {
-    fn from(value: oneshot::Receiver<T>) -> Self {
-        Self {
-            inner: Some(RefCell::new(Inner::new(value))),
-        }
-    }
 }
 
 #[derive(Debug)]
@@ -56,14 +14,55 @@ struct Inner<T> {
     received: Option<T>,
 }
 
-impl<T> Inner<T> {
-    fn new(receiver: oneshot::Receiver<T>) -> Self {
-        Self {
+impl<T> From<oneshot::Receiver<T>> for Response<T> {
+    fn from(receiver: oneshot::Receiver<T>) -> Self {
+        let inner = Inner {
             receiver,
             received: None,
+        };
+        Self {
+            inner: Some(RefCell::new(inner)),
         }
     }
+}
 
+impl<T: Send + 'static> Response<T> {
+    /// Spawns an async task.
+    pub fn new(future: impl std::future::Future<Output = T> + Send + 'static) -> Self {
+        let (tx, rx) = oneshot::channel();
+        tokio::spawn(async {
+            tx.send(future.await).ok();
+        });
+        Self::from(rx)
+    }
+}
+
+impl<T> Response<T> {
+    /// Create an empty response.
+    pub fn empty() -> Self {
+        Self { inner: None }
+    }
+
+    /// Returns `true` if the response was created from [`Response::empty`].
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_none()
+    }
+
+    /// Returns `true` until the task is running.
+    /// If the response is empty, always returns `false`.
+    pub fn is_loading(&self) -> bool {
+        self.inner
+            .as_ref()
+            .map_or(false, |r| r.borrow_mut().is_loading())
+    }
+
+    /// If the data has been received, return it only once.
+    pub fn take_data(&self) -> Option<T> {
+        self.inner.as_ref()?.borrow_mut().take_data()
+    }
+}
+
+impl<T> Inner<T> {
     fn is_loading(&mut self) -> bool {
         if self.received.is_some() {
             return false;
@@ -77,10 +76,6 @@ impl<T> Inner<T> {
             Err(oneshot::error::TryRecvError::Closed) => false,
         }
     }
-
-    // fn is_closed(&mut self) -> bool {
-    //     !self.is_loading()
-    // }
 
     fn take_data(&mut self) -> Option<T> {
         self.received
