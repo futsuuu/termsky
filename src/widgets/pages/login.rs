@@ -42,9 +42,6 @@ impl Login {
     }
 
     pub fn textarea(&mut self) -> Option<&mut TextArea<'static>> {
-        if self.response.is_loading() {
-            return None;
-        }
         self.focus.map(|n| &mut self.textareas[n])
     }
 
@@ -126,7 +123,7 @@ impl AppHandler for Login {
             } else if ev.code == KeyCode::Tab {
                 self.switch_focus();
                 return;
-            } else if ev.code == KeyCode::Enter && self.textarea().is_some() {
+            } else if ev.code == KeyCode::Enter && self.response.is_empty() {
                 self.response = app.atp.login(self.ident(), self.passwd());
                 self.lose_focus();
                 return;

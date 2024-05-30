@@ -43,13 +43,14 @@ impl<T> Response<T> {
         Self { inner: None }
     }
 
-    /// Returns `true` if the response was created from [`Response::empty`].
+    /// Returns `true` if the response can never return data.
     pub fn is_empty(&self) -> bool {
-        self.inner.is_none()
+        self.inner
+            .as_ref()
+            .map_or(true, |r| r.borrow_mut().is_empty())
     }
 
     /// Returns `true` until the task is running.
-    /// If the response is empty, always returns `false`.
     pub fn is_loading(&self) -> bool {
         self.inner
             .as_ref()
@@ -57,6 +58,7 @@ impl<T> Response<T> {
     }
 
     /// If the data has been received, return it only once.
+    /// After calling this method, the response will be empty.
     pub fn take_data(&self) -> Option<T> {
         self.inner.as_ref()?.borrow_mut().take_data()
     }
@@ -74,6 +76,20 @@ impl<T> Inner<T> {
             }
             Err(oneshot::error::TryRecvError::Empty) => true,
             Err(oneshot::error::TryRecvError::Closed) => false,
+        }
+    }
+
+    fn is_empty(&mut self) -> bool {
+        if self.received.is_some() {
+            return false;
+        }
+        match self.receiver.try_recv() {
+            Ok(received) => {
+                self.received = Some(received);
+                false
+            }
+            Err(oneshot::error::TryRecvError::Empty) => false,
+            Err(oneshot::error::TryRecvError::Closed) => true,
         }
     }
 
@@ -96,9 +112,42 @@ mod tests {
             sleep(Duration::from_millis(10)).await;
             1
         });
+
         assert_eq!(None, res.take_data());
+
         sleep(Duration::from_millis(50)).await;
         assert_eq!(Some(1), res.take_data());
+
         assert_eq!(None, res.take_data());
+    }
+
+    #[tokio::test]
+    async fn is_loading() {
+        let res = Response::new(async {
+            sleep(Duration::from_millis(10)).await;
+        });
+
+        assert!(res.is_loading());
+
+        sleep(Duration::from_millis(50)).await;
+        assert!(!res.is_loading());
+    }
+
+    #[tokio::test]
+    async fn is_empty() {
+        assert!(Response::<()>::empty().is_empty());
+
+        let res = Response::new(async {
+            sleep(Duration::from_millis(10)).await;
+            1
+        });
+
+        assert!(!res.is_empty());
+
+        sleep(Duration::from_millis(50)).await;
+        assert!(!res.is_empty());
+
+        res.take_data();
+        assert!(res.is_empty());
     }
 }

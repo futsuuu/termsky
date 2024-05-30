@@ -28,7 +28,7 @@ impl Home {
         }
     }
 
-    pub fn get_timeline_params(&mut self) -> bsky::feed::get_timeline::Parameters {
+    pub fn get_timeline_params(&self) -> bsky::feed::get_timeline::Parameters {
         bsky::feed::get_timeline::Parameters {
             algorithm: None,
             cursor: self.post_cursor.clone(),
@@ -95,12 +95,12 @@ impl WidgetRef for Home {
 
 impl AppHandler for Home {
     fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
-        if let Some(Ok(timeline)) = self.response.take_data() {
-            self.recv_timeline(timeline);
+        if self.posts_state.borrow().blank_height.is_some() && self.response.is_empty() {
+            self.response = app.atp.get_timeline(self.get_timeline_params());
         }
 
-        if self.posts_state.borrow().blank_height.is_some() && !self.response.is_loading() {
-            self.response = app.atp.get_timeline(self.get_timeline_params());
+        if let Some(Ok(timeline)) = self.response.take_data() {
+            self.recv_timeline(timeline);
         }
 
         if let TuiEvent::Key(key_event) = ev {

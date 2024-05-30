@@ -26,6 +26,10 @@ impl WidgetRef for Loading {
 
 impl AppHandler for Loading {
     fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+        if self.response.is_empty() {
+            self.response = app.atp.resume_session();
+        }
+
         if let Some(result) = self.response.take_data() {
             if result.is_ok() {
                 app.update_view(pages::Home::new());
@@ -35,10 +39,6 @@ impl AppHandler for Loading {
                 app.update_view(login);
             }
             return;
-        }
-
-        if self.response.is_empty() {
-            self.response = app.atp.resume_session();
         }
 
         if let TuiEvent::Key(key_event) = &ev {
