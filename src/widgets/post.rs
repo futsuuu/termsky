@@ -363,7 +363,10 @@ impl<'a> Storeable<'a> for &'a EmbedMedia {
                             .wrap_child(external.description.clone())
                             .fit_vertical()
                             .store(s.bottom_space(inner).height(3), s);
-                        external.uri.clone().store(s.bottom_space(inner).height(1), s);
+                        external
+                            .uri
+                            .clone()
+                            .store(s.bottom_space(inner).height(1), s);
                     })
                     .fit_vertical()
                     .store(area, store);
