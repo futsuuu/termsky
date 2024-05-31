@@ -4,6 +4,7 @@ use atrium_api::app::bsky;
 use ratatui::{prelude::*, widgets::*};
 
 use crate::{
+    atp::Response,
     prelude::*,
     widgets::{atoms::Spinner, molecules::Tab, organisms::TabBar, Posts, PostsState},
 };
@@ -12,10 +13,9 @@ use crate::{
 pub struct Home {
     posts: Posts,
     posts_state: RefCell<PostsState>,
+    response: Response<crate::atp::GetTimelineResult>,
     /// Used to get old posts
     post_cursor: Option<String>,
-    /// true when waiting the response
-    waiting: bool,
 }
 
 impl Home {
@@ -23,25 +23,20 @@ impl Home {
         Self {
             posts: Posts::new(),
             posts_state: RefCell::new(PostsState::new()),
+            response: Response::empty(),
             post_cursor: None,
-            waiting: false,
         }
     }
 
-    pub fn get_timeline_params(&mut self) -> Option<bsky::feed::get_timeline::Parameters> {
-        if self.posts_state.borrow().blank_height.is_none() || self.waiting {
-            return None;
-        }
-        self.waiting = true;
-        Some(bsky::feed::get_timeline::Parameters {
+    pub fn get_timeline_params(&self) -> bsky::feed::get_timeline::Parameters {
+        bsky::feed::get_timeline::Parameters {
             algorithm: None,
             cursor: self.post_cursor.clone(),
             limit: 15.try_into().ok(),
-        })
+        }
     }
 
     pub fn recv_timeline(&mut self, timeline: bsky::feed::get_timeline::Output) {
-        self.waiting = false;
         self.post_cursor = timeline.cursor;
         for post in timeline.feed {
             self.posts.add_post(post, false);
@@ -100,9 +95,14 @@ impl WidgetRef for Home {
 
 impl AppHandler for Home {
     fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
-        if let Some(params) = self.get_timeline_params() {
-            app.send(AtpRequest::GetTimeline(params));
+        if self.posts_state.borrow().blank_height.is_some() && self.response.is_empty() {
+            self.response = app.atp.get_timeline(self.get_timeline_params());
         }
+
+        if let Some(Ok(timeline)) = self.response.take_data() {
+            self.recv_timeline(timeline);
+        }
+
         if let TuiEvent::Key(key_event) = ev {
             if key_event.code == KeyCode::Esc {
                 app.exit();
@@ -114,12 +114,6 @@ impl AppHandler for Home {
             if key_event.code == KeyCode::Char('j') {
                 self.scroll_down();
             }
-        }
-    }
-
-    fn atp_response(&mut self, _app: &mut App, res: AtpResponse) {
-        if let AtpResponse::Timeline(Ok(timeline)) = res {
-            self.recv_timeline(timeline);
         }
     }
 }

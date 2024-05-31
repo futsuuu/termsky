@@ -162,8 +162,7 @@ fn set_ellipsis(mut lines: Vec<Line<'_>>) -> Vec<Line<'_>> {
 
 fn trailing_space(s: &str) -> &str {
     s.rsplit_once(|c: char| !c.is_whitespace() || c.is_control())
-        .map(|(_, s)| s)
-        .unwrap_or(s)
+        .map_or(s, |(_, s)| s)
 }
 
 #[cfg(test)]

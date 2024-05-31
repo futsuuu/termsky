@@ -1,15 +1,20 @@
 use ratatui::{prelude::*, widgets::*};
 
 use crate::{
+    atp::Response,
     prelude::*,
     widgets::{atoms::Spinner, pages},
 };
 
-pub struct Loading;
+pub struct Loading {
+    response: Response<crate::atp::ResumeSessionResult>,
+}
 
 impl Loading {
     pub fn new() -> Self {
-        Self
+        Self {
+            response: Response::empty(),
+        }
     }
 }
 
@@ -20,19 +25,22 @@ impl WidgetRef for Loading {
 }
 
 impl AppHandler for Loading {
-    fn atp_response(&mut self, app: &mut App, res: AtpResponse) {
-        if let AtpResponse::Session(session) = res {
-            if session.is_some() {
+    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+        if self.response.is_empty() {
+            self.response = app.atp.resume_session();
+        }
+
+        if let Some(result) = self.response.take_data() {
+            if result.is_ok() {
                 app.update_view(pages::Home::new());
             } else {
                 let mut login = pages::Login::new();
-                login.unblock_input();
+                login.switch_focus();
                 app.update_view(login);
             }
+            return;
         }
-    }
 
-    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
         if let TuiEvent::Key(key_event) = &ev {
             if key_event.code == crossterm::event::KeyCode::Esc {
                 app.exit();
