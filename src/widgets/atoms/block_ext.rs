@@ -100,7 +100,9 @@ impl Fit {
             area.right()
         };
         let bottom = if self.bottom {
-            target.bottom().saturating_add(area.bottom() - inner.bottom())
+            target
+                .bottom()
+                .saturating_add(area.bottom() - inner.bottom())
         } else {
             area.bottom()
         };

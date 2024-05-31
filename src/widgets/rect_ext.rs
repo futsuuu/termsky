@@ -24,7 +24,6 @@ impl RectExt for ratatui::layout::Rect {
     }
 }
 
-
 pub trait NewValue<T> {
     fn new_value(self, old: T) -> T;
 }
