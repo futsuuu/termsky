@@ -1,6 +1,8 @@
 pub trait RectExt {
+    #[allow(dead_code)]
     fn x(self, n: impl NewValue<u16>) -> Self;
     fn y(self, n: impl NewValue<u16>) -> Self;
+    #[allow(dead_code)]
     fn width(self, n: impl NewValue<u16>) -> Self;
     fn height(self, n: impl NewValue<u16>) -> Self;
 }
@@ -23,7 +25,6 @@ impl RectExt for ratatui::layout::Rect {
         self
     }
 }
-
 
 pub trait NewValue<T> {
     fn new_value(self, old: T) -> T;

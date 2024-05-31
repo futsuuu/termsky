@@ -1,0 +1,89 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+env:
+  RUST_BACKTRACE: 1
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fix:
+    permissions:
+      contents: write
+
+    runs-on: ubuntu-latest
+
+    outputs:
+      new-commit: ${{ steps.auto-commit.outputs.changes_detected }}
+
+    steps:
+      - name: Create GitHub Apps token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.PRIVATE_KEY }}
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy,rustfmt
+
+      - name: Setup cache for Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Fix Rust code
+        run: |
+          cargo clippy --locked --fix --allow-dirty
+          cargo fmt
+
+      - name: Auto Commit
+        id: auto-commit
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore: apply formatter/linter changes"
+          commit_user_name: "github-actions[bot]"
+          commit_user_email: "github-actions[bot]@users.noreply.github.com"
+          commit_author: "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
+
+  check:
+    needs: [fix]
+    if: needs.fix.outputs.new-commit == 'false'
+
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Setup cache for Rust
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --locked
+
+      - name: Test
+        run: cargo test --locked
+
+      - name: Lint
+        run: cargo clippy --locked -- --deny warnings
