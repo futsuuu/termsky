@@ -1,6 +1,8 @@
 pub trait RectExt {
+    #[allow(dead_code)]
     fn x(self, n: impl NewValue<u16>) -> Self;
     fn y(self, n: impl NewValue<u16>) -> Self;
+    #[allow(dead_code)]
     fn width(self, n: impl NewValue<u16>) -> Self;
     fn height(self, n: impl NewValue<u16>) -> Self;
 }
