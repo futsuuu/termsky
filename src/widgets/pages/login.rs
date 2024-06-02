@@ -5,7 +5,7 @@ use crate::{
     prelude::*,
     widgets::{
         atoms::{Spinner, TextArea},
-        pages,
+        ViewID,
     },
 };
 
@@ -18,22 +18,20 @@ pub struct Login {
 
 impl Default for Login {
     fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Login {
-    pub fn new() -> Self {
-        Self {
+        let mut login = Self {
             textareas: [
                 TextArea::new(" Handle name or Email address ", false),
                 TextArea::new(" Password ", true),
             ],
             focus: None,
             response: Response::empty(),
-        }
+        };
+        login.switch_focus();
+        login
     }
+}
 
+impl Login {
     pub fn ident(&self) -> String {
         self.textareas[0].lines()[0].to_string()
     }
@@ -105,7 +103,7 @@ impl AppHandler for Login {
     fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
         if let Some(result) = self.response.take_data() {
             if result.is_ok() {
-                app.update_view(pages::Home::new());
+                app.set_view_id(ViewID::Home);
             } else {
                 self.switch_focus();
             }

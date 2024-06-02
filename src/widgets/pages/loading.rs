@@ -3,19 +3,12 @@ use ratatui::{prelude::*, widgets::*};
 use crate::{
     atp::Response,
     prelude::*,
-    widgets::{atoms::Spinner, pages},
+    widgets::{atoms::Spinner, ViewID},
 };
 
+#[derive(Default)]
 pub struct Loading {
     response: Response<crate::atp::ResumeSessionResult>,
-}
-
-impl Loading {
-    pub fn new() -> Self {
-        Self {
-            response: Response::empty(),
-        }
-    }
 }
 
 impl WidgetRef for Loading {
@@ -31,13 +24,11 @@ impl AppHandler for Loading {
         }
 
         if let Some(result) = self.response.take_data() {
-            if result.is_ok() {
-                app.update_view(pages::Home::new());
+            app.set_view_id(if result.is_ok() {
+                ViewID::Home
             } else {
-                let mut login = pages::Login::new();
-                login.switch_focus();
-                app.update_view(login);
-            }
+                ViewID::Login
+            });
             return;
         }
 

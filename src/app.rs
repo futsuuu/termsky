@@ -1,27 +1,29 @@
 use anyhow::Result;
-use tracing::{event, Level};
 
-use crate::{prelude::*, widgets::pages};
+use crate::{prelude::*, widgets::ViewID};
 
 pub struct App {
     running: bool,
-    new_view: Option<View>,
     pub atp: Atp,
-    tui: Tui,
+    view_id: ViewID,
+    new_view_id: Option<ViewID>,
 }
 
 impl App {
     fn new() -> Result<Self> {
         Ok(Self {
             running: true,
-            new_view: None,
             atp: Atp::new()?,
-            tui: Tui::new()?,
+            view_id: ViewID::default(),
+            new_view_id: None,
         })
     }
 
-    pub fn update_view(&mut self, view: impl Into<View>) {
-        self.new_view = Some(view.into());
+    pub fn view_id(&self) -> &ViewID {
+        &self.view_id
+    }
+    pub fn set_view_id(&mut self, state: ViewID) {
+        self.new_view_id = Some(state);
     }
 
     pub fn exit(&mut self) {
@@ -36,20 +38,23 @@ pub trait Handler {
 
 pub async fn run() -> Result<()> {
     let mut app = App::new()?;
-    let mut view = View::Loading(pages::Loading::new());
+    let mut tui = Tui::new()?;
 
-    event!(Level::INFO, "start main loop");
-    while app.running {
-        app.tui.render(&view)?;
-        let Some(event) = app.tui.event().await else {
-            break;
-        };
+    let mut view = View::default();
+
+    tracing::trace!("start main loop");
+    while let Some(event) = tui.event().await {
         view.tui_event(&mut app, event);
-        if let Some(new_view) = app.new_view.take() {
-            view.update(new_view);
+        if !app.running {
+            break;
         }
+        if let Some(s) = app.new_view_id.take() {
+            tracing::info!("set view ID: {s:?}");
+            app.view_id = s;
+        }
+        tui.render(&view)?;
     }
 
-    event!(Level::INFO, "stop main loop");
+    tracing::trace!("stop main loop");
     Ok(())
 }

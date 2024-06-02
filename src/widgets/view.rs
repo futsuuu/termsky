@@ -1,66 +1,43 @@
-use std::fmt;
-
-use ratatui::{prelude::*, widgets::*};
-use tracing::{event, Level};
+use ratatui::{buffer::Buffer, layout::Rect, widgets::WidgetRef};
 
 use crate::{
     prelude::*,
     widgets::pages::{Home, Loading, Login},
 };
 
-pub enum View {
-    Home(Home),
-    Loading(Loading),
-    Login(Login),
+#[derive(Default)]
+pub struct View {
+    id: ViewID,
+    home: Home,
+    loading: Loading,
+    login: Login,
 }
 
-impl View {
-    pub fn update<V: Into<View>>(&mut self, new: V) {
-        *self = new.into();
-        event!(Level::DEBUG, "set view: {self:?}");
-    }
+#[derive(Clone, Debug, Default)]
+pub enum ViewID {
+    Home,
+    #[default]
+    Loading,
+    Login,
 }
 
 impl WidgetRef for View {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        match self {
-            View::Home(v) => v.render_ref(area, buf),
-            View::Loading(v) => v.render_ref(area, buf),
-            View::Login(v) => v.render_ref(area, buf),
+        match self.id {
+            ViewID::Home => self.home.render_ref(area, buf),
+            ViewID::Loading => self.loading.render_ref(area, buf),
+            ViewID::Login => self.login.render_ref(area, buf),
         }
     }
 }
 
 impl AppHandler for View {
     fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
-        match self {
-            View::Home(v) => v.tui_event(app, ev),
-            View::Loading(v) => v.tui_event(app, ev),
-            View::Login(v) => v.tui_event(app, ev),
+        self.id = app.view_id().clone();
+        match self.id {
+            ViewID::Home => self.home.tui_event(app, ev),
+            ViewID::Loading => self.loading.tui_event(app, ev),
+            ViewID::Login => self.login.tui_event(app, ev),
         }
-    }
-}
-
-macro_rules! impl_from {
-    ($s:ident) => {
-        impl From<$s> for View {
-            fn from(value: $s) -> Self {
-                Self::$s(value)
-            }
-        }
-    };
-}
-
-impl_from!(Home);
-impl_from!(Loading);
-impl_from!(Login);
-
-impl fmt::Debug for View {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        f.write_str(match self {
-            Self::Home(_) => "Home",
-            Self::Loading(_) => "Loading",
-            Self::Login(_) => "Login",
-        })
     }
 }

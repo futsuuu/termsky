@@ -9,7 +9,7 @@ use crate::{
     widgets::{atoms::Spinner, molecules::Tab, organisms::TabBar, Posts, PostsState},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Home {
     posts: Posts,
     posts_state: RefCell<PostsState>,
@@ -19,15 +19,6 @@ pub struct Home {
 }
 
 impl Home {
-    pub fn new() -> Self {
-        Self {
-            posts: Posts::new(),
-            posts_state: RefCell::new(PostsState::new()),
-            response: Response::empty(),
-            post_cursor: None,
-        }
-    }
-
     pub fn get_timeline_params(&self) -> bsky::feed::get_timeline::Parameters {
         bsky::feed::get_timeline::Parameters {
             algorithm: None,
