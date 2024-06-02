@@ -1,8 +1,10 @@
+use crossterm::event::KeyCode;
 use ratatui::{prelude::*, widgets::*};
+use tui_textarea::Key;
 
 use crate::{
+    app::App,
     atp::Response,
-    prelude::*,
     widgets::{
         atoms::{Spinner, TextArea},
         ViewID,
@@ -99,37 +101,39 @@ impl WidgetRef for Login {
     }
 }
 
-impl AppHandler for Login {
-    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+impl crate::app::EventHandler for Login {
+    fn on_render(&mut self, app: &mut App) {
         if let Some(result) = self.response.take_data() {
             if result.is_ok() {
                 app.set_view_id(ViewID::Home);
             } else {
                 self.switch_focus();
             }
-            return;
         }
+    }
 
-        if let TuiEvent::Key(ev) = ev {
-            if ev.code == KeyCode::Esc {
-                if self.has_focus() {
-                    self.lose_focus();
-                } else {
-                    app.exit();
-                }
-                return;
-            } else if ev.code == KeyCode::Tab {
-                self.switch_focus();
-                return;
-            } else if ev.code == KeyCode::Enter && self.response.is_empty() {
-                self.response = app.atp.login(self.ident(), self.passwd());
-                self.lose_focus();
-                return;
-            }
+    fn on_key(&mut self, ev: crossterm::event::KeyEvent, app: &mut App) {
+        if ev.code == KeyCode::Esc {
+            app.exit();
+        } else if ev.code == KeyCode::Tab {
+            self.switch_focus();
         }
+    }
 
-        if let Some(ref mut textarea) = self.textarea() {
-            textarea.input(ev);
+    fn on_input(&mut self, input: tui_textarea::Input, app: &mut App) {
+        if input.key == Key::Esc {
+            self.lose_focus();
+        } else if input.key == Key::Tab {
+            self.switch_focus();
+        } else if input.key == Key::Enter && self.response.is_empty() {
+            self.response = app.atp.login(self.ident(), self.passwd());
+            self.lose_focus();
+        } else if let Some(ref mut textarea) = self.textarea() {
+            textarea.input(input);
         }
+    }
+
+    fn focus_in_textarea(&self) -> bool {
+        self.has_focus()
     }
 }

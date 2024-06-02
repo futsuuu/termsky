@@ -21,23 +21,56 @@ pub enum ViewID {
     Login,
 }
 
-impl WidgetRef for View {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        match self.id {
-            ViewID::Home => self.home.render_ref(area, buf),
-            ViewID::Loading => self.loading.render_ref(area, buf),
-            ViewID::Login => self.login.render_ref(area, buf),
+macro_rules! inner {
+    ($self:ident) => {
+        match $self.id {
+            ViewID::Home => &$self.home,
+            ViewID::Loading => &$self.loading,
+            ViewID::Login => &$self.login,
         }
+    };
+    (mut $self:ident) => {
+        match $self.id {
+            ViewID::Home => &mut $self.home,
+            ViewID::Loading => &mut $self.loading,
+            ViewID::Login => &mut $self.login,
+        }
+    };
+}
+
+impl View {
+    fn widget_ref(&self) -> &dyn WidgetRef {
+        inner!(self)
+    }
+    fn event_handler(&self) -> &dyn crate::app::EventHandler {
+        inner!(self)
+    }
+    fn event_handler_mut(&mut self) -> &mut dyn crate::app::EventHandler {
+        inner!(mut self)
     }
 }
 
-impl AppHandler for View {
-    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+impl WidgetRef for View {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+        self.widget_ref().render_ref(area, buf)
+    }
+}
+
+impl crate::app::EventHandler for View {
+    fn on_render(&mut self, app: &mut App) {
         self.id = app.view_id().clone();
-        match self.id {
-            ViewID::Home => self.home.tui_event(app, ev),
-            ViewID::Loading => self.loading.tui_event(app, ev),
-            ViewID::Login => self.login.tui_event(app, ev),
-        }
+        self.event_handler_mut().on_render(app)
+    }
+    fn on_key(&mut self, ev: crossterm::event::KeyEvent, app: &mut App) {
+        self.event_handler_mut().on_key(ev, app)
+    }
+    fn on_mouse(&mut self, ev: crossterm::event::MouseEvent, app: &mut App) {
+        self.event_handler_mut().on_mouse(ev, app)
+    }
+    fn on_input(&mut self, input: tui_textarea::Input, app: &mut App) {
+        self.event_handler_mut().on_input(input, app)
+    }
+    fn focus_in_textarea(&self) -> bool {
+        self.event_handler().focus_in_textarea()
     }
 }

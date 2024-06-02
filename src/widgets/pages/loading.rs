@@ -17,8 +17,8 @@ impl WidgetRef for Loading {
     }
 }
 
-impl AppHandler for Loading {
-    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+impl crate::app::EventHandler for Loading {
+    fn on_render(&mut self, app: &mut App) {
         if self.response.is_empty() {
             self.response = app.atp.resume_session();
         }
@@ -29,13 +29,12 @@ impl AppHandler for Loading {
             } else {
                 ViewID::Login
             });
-            return;
         }
+    }
 
-        if let TuiEvent::Key(key_event) = &ev {
-            if key_event.code == crossterm::event::KeyCode::Esc {
-                app.exit();
-            }
+    fn on_key(&mut self, ev: crossterm::event::KeyEvent, app: &mut App) {
+        if ev.code == crossterm::event::KeyCode::Esc {
+            app.exit();
         }
     }
 }

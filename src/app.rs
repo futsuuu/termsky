@@ -31,9 +31,15 @@ impl App {
     }
 }
 
-pub trait Handler {
-    #![allow(unused_variables)]
-    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {}
+#[allow(unused_variables)]
+pub trait EventHandler {
+    fn on_render(&mut self, app: &mut App) {}
+    fn on_key(&mut self, ev: crossterm::event::KeyEvent, app: &mut App) {}
+    fn on_mouse(&mut self, ev: crossterm::event::MouseEvent, app: &mut App) {}
+    fn on_input(&mut self, input: tui_textarea::Input, app: &mut App) {}
+    fn focus_in_textarea(&self) -> bool {
+        false
+    }
 }
 
 pub async fn run() -> Result<()> {
@@ -44,7 +50,15 @@ pub async fn run() -> Result<()> {
 
     tracing::trace!("start main loop");
     while let Some(event) = tui.event().await {
-        view.tui_event(&mut app, event);
+        view.on_render(&mut app);
+        if view.focus_in_textarea() {
+            view.on_input(event.into(), &mut app);
+        } else if let TuiEvent::Key(ev) = event {
+            view.on_key(ev, &mut app);
+        } else if let TuiEvent::Mouse(ev) = event {
+            view.on_mouse(ev, &mut app);
+        }
+
         if !app.running {
             break;
         }
