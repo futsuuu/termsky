@@ -9,7 +9,7 @@ use crate::{
     widgets::{
         molecules::Tab,
         organisms::TabBar,
-        pages::{Home, Loading, Login},
+        pages::{Home, Login},
     },
 };
 
@@ -17,30 +17,26 @@ use crate::{
 pub struct View {
     id: ViewID,
     home: Home,
-    loading: Loading,
     login: Login,
 }
 
 #[derive(Clone, Debug, Default)]
 pub enum ViewID {
-    Home,
     #[default]
-    Loading,
     Login,
+    Home,
 }
 
 macro_rules! inner {
     ($self:ident) => {
         match $self.id {
             ViewID::Home => &$self.home,
-            ViewID::Loading => &$self.loading,
             ViewID::Login => &$self.login,
         }
     };
     (mut $self:ident) => {
         match $self.id {
             ViewID::Home => &mut $self.home,
-            ViewID::Loading => &mut $self.loading,
             ViewID::Login => &mut $self.login,
         }
     };
@@ -61,7 +57,7 @@ impl View {
 impl WidgetRef for View {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         let [tabbar_area, main_area] =
-            Layout::horizontal([Constraint::Fill(3), Constraint::Fill(10)])
+            Layout::horizontal([Constraint::Fill(1), Constraint::Fill(4)])
                 .horizontal_margin(1)
                 .areas(area);
 

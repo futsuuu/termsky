@@ -15,21 +15,21 @@ use crate::{
 pub struct Login {
     textareas: [TextArea<'static>; 2],
     focus: Option<usize>,
-    response: Response<crate::atp::LoginResult>,
+    login_res: Response<crate::atp::LoginResult>,
+    resume_session_res: Response<crate::atp::ResumeSessionResult>,
 }
 
 impl Default for Login {
     fn default() -> Self {
-        let mut login = Self {
+        Self {
             textareas: [
                 TextArea::new(" Handle name or Email address ", false),
                 TextArea::new(" Password ", true),
             ],
             focus: None,
-            response: Response::empty(),
-        };
-        login.switch_focus();
-        login
+            login_res: Response::empty(),
+            resume_session_res: Response::empty(),
+        }
     }
 }
 
@@ -46,7 +46,7 @@ impl Login {
     }
 
     pub fn switch_focus(&mut self) {
-        if self.response.is_loading() {
+        if self.login_res.is_loading() {
             return;
         }
         if let Some(n) = self.focus {
@@ -79,7 +79,7 @@ impl WidgetRef for Login {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         let [_, area, _] = Layout::horizontal([
             Constraint::Percentage(30),
-            Constraint::Min(50),
+            Constraint::Min(70),
             Constraint::Percentage(30),
         ])
         .areas(area);
@@ -95,7 +95,7 @@ impl WidgetRef for Login {
 
         self.textareas[0].widget().render(ident, buf);
         self.textareas[1].widget().render(passwd, buf);
-        if self.response.is_loading() {
+        if self.login_res.is_loading() || self.resume_session_res.is_loading() {
             Spinner::new().render(spinner, buf);
         }
     }
@@ -103,7 +103,15 @@ impl WidgetRef for Login {
 
 impl crate::app::EventHandler for Login {
     fn on_render(&mut self, app: &mut App) {
-        if let Some(result) = self.response.take_data() {
+        if self.resume_session_res.is_empty() {
+            self.resume_session_res = app.atp.resume_session();
+        } else if let Some(result) = self.resume_session_res.take_data() {
+            if result.is_ok() {
+                app.set_view_id(ViewID::Home);
+            } else {
+                self.switch_focus();
+            }
+        } else if let Some(result) = self.login_res.take_data() {
             if result.is_ok() {
                 app.set_view_id(ViewID::Home);
             } else {
@@ -115,7 +123,12 @@ impl crate::app::EventHandler for Login {
     fn on_key(&mut self, ev: crossterm::event::KeyEvent, app: &mut App) {
         if ev.code == KeyCode::Esc {
             app.exit();
-        } else if ev.code == KeyCode::Tab {
+            return;
+        }
+        if self.resume_session_res.is_loading() {
+            return;
+        }
+        if ev.code == KeyCode::Tab {
             self.switch_focus();
         }
     }
@@ -125,8 +138,8 @@ impl crate::app::EventHandler for Login {
             self.lose_focus();
         } else if input.key == Key::Tab {
             self.switch_focus();
-        } else if input.key == Key::Enter && self.response.is_empty() {
-            self.response = app.atp.login(self.ident(), self.passwd());
+        } else if input.key == Key::Enter && self.login_res.is_empty() {
+            self.login_res = app.atp.login(self.ident(), self.passwd());
             self.lose_focus();
         } else if let Some(ref mut textarea) = self.textarea() {
             textarea.input(input);
