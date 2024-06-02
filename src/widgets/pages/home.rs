@@ -6,7 +6,7 @@ use ratatui::{prelude::*, widgets::*};
 use crate::{
     atp::Response,
     prelude::*,
-    widgets::{atoms::Spinner, molecules::Tab, organisms::TabBar, Posts, PostsState},
+    widgets::{atoms::Spinner, Posts, PostsState},
 };
 
 #[derive(Debug, Default)]
@@ -45,22 +45,12 @@ impl Home {
 
 impl WidgetRef for Home {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let [tabs_area, _, posts_area, _] = Layout::horizontal([
-            Constraint::Fill(2),
+        let [_, posts_area, _] = Layout::horizontal([
             Constraint::Fill(1),
-            Constraint::Fill(6),
-            Constraint::Fill(2),
+            Constraint::Fill(5),
+            Constraint::Fill(1),
         ])
-        .horizontal_margin(1)
         .areas(area);
-
-        // tabs
-        TabBar::from_iter([
-            Tab::new("1. Login"),
-            Tab::new("2. Home").selected(true),
-            Tab::new("3. Settings").active(false),
-        ])
-        .render(tabs_area, buf);
 
         // posts
         let mut posts_state = self.posts_state.borrow_mut();

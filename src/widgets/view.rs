@@ -1,8 +1,16 @@
-use ratatui::{buffer::Buffer, layout::Rect, widgets::WidgetRef};
+use ratatui::{
+    buffer::Buffer,
+    layout::{Constraint, Layout, Rect},
+    widgets::WidgetRef,
+};
 
 use crate::{
     prelude::*,
-    widgets::pages::{Home, Loading, Login},
+    widgets::{
+        molecules::Tab,
+        organisms::TabBar,
+        pages::{Home, Loading, Login},
+    },
 };
 
 #[derive(Default)]
@@ -52,7 +60,19 @@ impl View {
 
 impl WidgetRef for View {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        self.widget_ref().render_ref(area, buf)
+        let [tabbar_area, main_area] =
+            Layout::horizontal([Constraint::Fill(3), Constraint::Fill(10)])
+                .horizontal_margin(1)
+                .areas(area);
+
+        TabBar::from_iter([
+            Tab::new("1. Login").selected(matches!(self.id, ViewID::Login)),
+            Tab::new("2. Home").selected(matches!(self.id, ViewID::Home)),
+            Tab::new("3. Settings").active(false),
+        ])
+        .render_ref(tabbar_area, buf);
+
+        self.widget_ref().render_ref(main_area, buf)
     }
 }
 
