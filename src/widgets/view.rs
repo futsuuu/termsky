@@ -20,24 +20,17 @@ pub struct View {
     login: Login,
 }
 
-#[derive(Clone, Debug, Default)]
-pub enum ViewID {
-    #[default]
-    Login,
-    Home,
-}
-
 macro_rules! inner {
     ($self:ident) => {
         match $self.id {
             ViewID::Home => &$self.home,
-            ViewID::Login => &$self.login,
+            ViewID::Login { .. } => &$self.login,
         }
     };
     (mut $self:ident) => {
         match $self.id {
             ViewID::Home => &mut $self.home,
-            ViewID::Login => &mut $self.login,
+            ViewID::Login { .. } => &mut $self.login,
         }
     };
 }
@@ -62,7 +55,7 @@ impl WidgetRef for View {
                 .areas(area);
 
         TabBar::from_iter([
-            Tab::new("1. Login").selected(matches!(self.id, ViewID::Login)),
+            Tab::new("1. Login").selected(matches!(self.id, ViewID::Login { .. })),
             Tab::new("2. Home").selected(matches!(self.id, ViewID::Home)),
             Tab::new("3. Settings").active(false),
         ])
@@ -88,5 +81,29 @@ impl crate::app::EventHandler for View {
     }
     fn focus_in_textarea(&self) -> bool {
         self.event_handler().focus_in_textarea()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ViewID {
+    Login { resume_session: bool },
+    Home,
+}
+
+impl Default for ViewID {
+    fn default() -> Self {
+        Self::Login {
+            resume_session: true,
+        }
+    }
+}
+
+impl ViewID {
+    pub fn login_resume_session(&self) -> bool {
+        if let Self::Login { resume_session, .. } = self {
+            *resume_session
+        } else {
+            false
+        }
     }
 }

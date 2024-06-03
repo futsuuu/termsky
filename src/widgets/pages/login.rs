@@ -17,6 +17,7 @@ pub struct Login {
     focus: Option<usize>,
     login_res: Response<crate::atp::LoginResult>,
     resume_session_res: Response<crate::atp::ResumeSessionResult>,
+    resume_session_failed: bool,
 }
 
 impl Default for Login {
@@ -29,6 +30,7 @@ impl Default for Login {
             focus: None,
             login_res: Response::empty(),
             resume_session_res: Response::empty(),
+            resume_session_failed: false,
         }
     }
 }
@@ -103,12 +105,16 @@ impl WidgetRef for Login {
 
 impl crate::app::EventHandler for Login {
     fn on_render(&mut self, app: &mut App) {
-        if self.resume_session_res.is_empty() {
+        if app.view_id().login_resume_session()
+            && self.resume_session_res.is_empty()
+            && !self.resume_session_failed
+        {
             self.resume_session_res = app.atp.resume_session();
         } else if let Some(result) = self.resume_session_res.take_data() {
             if result.is_ok() {
                 app.set_view_id(ViewID::Home);
             } else {
+                self.resume_session_failed = true;
                 self.switch_focus();
             }
         } else if let Some(result) = self.login_res.take_data() {
