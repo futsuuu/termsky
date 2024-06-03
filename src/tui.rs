@@ -1,10 +1,9 @@
 use std::{
-    io::{stdout, Stdout},
+    io::{stdout, Result, Stdout},
     panic,
     time::Duration,
 };
 
-use anyhow::Result;
 use crossterm::{
     cursor,
     event::{self as tui_event, EventStream, KeyEvent, KeyEventKind, MouseEvent},
@@ -70,6 +69,8 @@ impl From<Event> for tui_textarea::Input {
 async fn collect_event(tx: mpsc::UnboundedSender<Event>) {
     let mut interval = time::interval(Duration::from_millis(250));
     let mut events = EventStream::new();
+    event!(Level::TRACE, "start reading events");
+    tx.send(Event::Tick).ok();
     loop {
         let event = tokio::select! {
             _ = tx.closed() => {
@@ -102,7 +103,7 @@ async fn collect_event(tx: mpsc::UnboundedSender<Event>) {
         }
     }
 
-    event!(Level::DEBUG, "stop handler: channel closed");
+    event!(Level::TRACE, "stop reading events: channel closed");
 }
 
 pub fn enter() -> Result<()> {

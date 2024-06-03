@@ -13,25 +13,18 @@ use crate::{
     },
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Posts {
     posts: Vec<Post>,
     pub scroll: u16,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct PostsState {
     pub blank_height: Option<u16>,
 }
 
 impl Posts {
-    pub fn new() -> Self {
-        Self {
-            posts: Vec::new(),
-            scroll: 0,
-        }
-    }
-
     pub fn add_post(&mut self, post: FeedViewPost, new: bool) {
         let post = post.into();
         if new {
@@ -39,12 +32,6 @@ impl Posts {
         } else {
             self.posts.push(post);
         }
-    }
-}
-
-impl PostsState {
-    pub fn new() -> Self {
-        Self { blank_height: None }
     }
 }
 

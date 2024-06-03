@@ -14,6 +14,12 @@ struct Inner<T> {
     received: Option<T>,
 }
 
+impl<T> Default for Response<T> {
+    fn default() -> Self {
+        Self::empty()
+    }
+}
+
 impl<T> From<oneshot::Receiver<T>> for Response<T> {
     fn from(receiver: oneshot::Receiver<T>) -> Self {
         let inner = Inner {

@@ -11,4 +11,4 @@ mod view;
 pub use post::{Posts, PostsState};
 pub use rect_ext::RectExt;
 use store::{Store, Storeable};
-pub use view::View;
+pub use view::{View, ViewID};

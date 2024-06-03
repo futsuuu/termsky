@@ -6,10 +6,10 @@ use ratatui::{prelude::*, widgets::*};
 use crate::{
     atp::Response,
     prelude::*,
-    widgets::{atoms::Spinner, molecules::Tab, organisms::TabBar, Posts, PostsState},
+    widgets::{atoms::Spinner, Posts, PostsState},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct Home {
     posts: Posts,
     posts_state: RefCell<PostsState>,
@@ -19,15 +19,6 @@ pub struct Home {
 }
 
 impl Home {
-    pub fn new() -> Self {
-        Self {
-            posts: Posts::new(),
-            posts_state: RefCell::new(PostsState::new()),
-            response: Response::empty(),
-            post_cursor: None,
-        }
-    }
-
     pub fn get_timeline_params(&self) -> bsky::feed::get_timeline::Parameters {
         bsky::feed::get_timeline::Parameters {
             algorithm: None,
@@ -54,22 +45,12 @@ impl Home {
 
 impl WidgetRef for Home {
     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        let [tabs_area, _, posts_area, _] = Layout::horizontal([
-            Constraint::Fill(2),
+        let [_, posts_area, _] = Layout::horizontal([
             Constraint::Fill(1),
-            Constraint::Fill(6),
-            Constraint::Fill(2),
+            Constraint::Fill(5),
+            Constraint::Fill(1),
         ])
-        .horizontal_margin(1)
         .areas(area);
-
-        // tabs
-        TabBar::from_iter([
-            Tab::new("1. Login"),
-            Tab::new("2. Home").selected(true),
-            Tab::new("3. Settings").active(false),
-        ])
-        .render(tabs_area, buf);
 
         // posts
         let mut posts_state = self.posts_state.borrow_mut();
@@ -93,8 +74,8 @@ impl WidgetRef for Home {
     }
 }
 
-impl AppHandler for Home {
-    fn tui_event(&mut self, app: &mut App, ev: TuiEvent) {
+impl crate::app::EventHandler for Home {
+    fn on_render(&mut self, app: &mut App) {
         if self.posts_state.borrow().blank_height.is_some() && self.response.is_empty() {
             self.response = app.atp.get_timeline(self.get_timeline_params());
         }
@@ -102,18 +83,18 @@ impl AppHandler for Home {
         if let Some(Ok(timeline)) = self.response.take_data() {
             self.recv_timeline(timeline);
         }
+    }
 
-        if let TuiEvent::Key(key_event) = ev {
-            if key_event.code == KeyCode::Esc {
-                app.exit();
-                return;
-            }
-            if key_event.code == KeyCode::Char('k') {
-                self.scroll_up();
-            }
-            if key_event.code == KeyCode::Char('j') {
-                self.scroll_down();
-            }
+    fn on_key(&mut self, ev: crossterm::event::KeyEvent, app: &mut App) {
+        if ev.code == KeyCode::Esc {
+            app.exit();
+            return;
+        }
+        if ev.code == KeyCode::Char('k') {
+            self.scroll_up();
+        }
+        if ev.code == KeyCode::Char('j') {
+            self.scroll_down();
         }
     }
 }
