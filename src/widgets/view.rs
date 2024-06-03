@@ -1,3 +1,4 @@
+use crossterm::event::KeyCode;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
@@ -70,9 +71,18 @@ impl crate::app::EventHandler for View {
         self.id = app.view_id().clone();
         self.event_handler_mut().on_render(app)
     }
+
     fn on_key(&mut self, ev: crossterm::event::KeyEvent, app: &mut App) {
+        if ev.code == KeyCode::Char('1') {
+            app.set_view_id(ViewID::Login {
+                resume_session: false,
+            });
+        } else if ev.code == KeyCode::Char('2') {
+            app.set_view_id(ViewID::Home);
+        }
         self.event_handler_mut().on_key(ev, app)
     }
+
     fn on_mouse(&mut self, ev: crossterm::event::MouseEvent, app: &mut App) {
         self.event_handler_mut().on_mouse(ev, app)
     }
