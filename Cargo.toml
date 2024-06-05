@@ -13,7 +13,7 @@ anyhow = "1.0"
 tracing = { version = "0.1", features = ["release_max_level_off", "max_level_trace"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
 
-atrium-api = "0.22.1"
+atrium-api = "0.22.2"
 atrium-xrpc-client = "0.5.4"
 reqwest = "*"
 async-trait = "*"
@@ -29,4 +29,4 @@ textwrap = "0.16"
 nestify = "0.3"
 
 [dev-dependencies]
-rstest = { version = "0.19", default-features = false }
+rstest = { version = "0.21", default-features = false }
