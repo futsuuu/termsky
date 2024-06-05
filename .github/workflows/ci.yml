@@ -1,16 +1,31 @@
 name: CI
 
 on:
-  pull_request:
-    branches:
-      - main
+  pull_request_target:
+    types:
+      - labeled
 
 env:
   RUST_BACKTRACE: 1
   CARGO_TERM_COLOR: always
 
 jobs:
-  fix:
+  remove-label:
+    name: Remove trigger label
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Remove label
+        run: gh pr edit "${PR}" --remove-label 'trigger:CI'
+        env:
+          PR: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  auto-fix:
+    name: Commit formatter/linter changes
+    if: contains(github.event.pull_request.labels.*.name, 'trigger:CI')
+
     permissions:
       contents: write
 
@@ -56,7 +71,8 @@ jobs:
           commit_author: "github-actions[bot] <github-actions[bot]@users.noreply.github.com>"
 
   check:
-    needs: [fix]
+    name: Check
+    needs: auto-fix
     if: needs.fix.outputs.new-commit == 'false'
 
     runs-on: ${{ matrix.os }}
