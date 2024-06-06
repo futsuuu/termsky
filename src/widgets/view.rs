@@ -10,7 +10,7 @@ use crate::{
     widgets::{
         molecules::Tab,
         organisms::TabBar,
-        pages::{Home, Login},
+        pages::{Home, Login, Notifications},
     },
 };
 
@@ -19,6 +19,7 @@ pub struct View {
     id: ViewID,
     home: Home,
     login: Login,
+    notifications: Notifications,
 }
 
 macro_rules! inner {
@@ -26,12 +27,14 @@ macro_rules! inner {
         match $self.id {
             ViewID::Home => &$self.home,
             ViewID::Login { .. } => &$self.login,
+            ViewID::Notifications => &$self.notifications,
         }
     };
     (mut $self:ident) => {
         match $self.id {
             ViewID::Home => &mut $self.home,
             ViewID::Login { .. } => &mut $self.login,
+            ViewID::Notifications => &mut $self.notifications,
         }
     };
 }
@@ -56,9 +59,10 @@ impl WidgetRef for View {
                 .areas(area);
 
         TabBar::from_iter([
-            Tab::new("1. Login").selected(matches!(self.id, ViewID::Login { .. })),
-            Tab::new("2. Home").selected(matches!(self.id, ViewID::Home)),
-            Tab::new("3. Settings").active(false),
+            Tab::new("  1. Login").selected(matches!(self.id, ViewID::Login { .. })),
+            Tab::new("  2. Home").selected(matches!(self.id, ViewID::Home)),
+            Tab::new("  3. Notifications").selected(matches!(self.id, ViewID::Notifications)),
+            Tab::new("  4. Settings").active(false),
         ])
         .render_ref(tabbar_area, buf);
 
@@ -79,6 +83,8 @@ impl crate::app::EventHandler for View {
             });
         } else if ev.code == KeyCode::Char('2') {
             app.set_view_id(ViewID::Home);
+        } else if ev.code == KeyCode::Char('3') {
+            app.set_view_id(ViewID::Notifications);
         }
         self.event_handler_mut().on_key(ev, app)
     }
@@ -98,6 +104,7 @@ impl crate::app::EventHandler for View {
 pub enum ViewID {
     Login { resume_session: bool },
     Home,
+    Notifications,
 }
 
 impl Default for ViewID {

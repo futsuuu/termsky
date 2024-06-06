@@ -6,6 +6,7 @@ use atrium_api::{
 use ratatui::{prelude::*, widgets::*};
 
 use crate::{
+    atp::types::Account,
     prelude::*,
     widgets::{
         atoms::{BlockExt, Text},
@@ -56,10 +57,7 @@ impl StatefulWidgetRef for Posts {
 nestify::nest! {
     #[derive(Debug)]*
     struct Post {
-        author: struct Account {
-            name: String,
-            opt_name: Option<String>,
-        },
+        author: Account,
         content: Text,
         likes: u64,
         replies: u64,
@@ -139,22 +137,6 @@ impl From<Box<bsky::embed::record::ViewRecord>> for Post {
                     })
                 })
                 .map(Into::into),
-        }
-    }
-}
-
-impl From<bsky::actor::defs::ProfileViewBasic> for Account {
-    fn from(value: bsky::actor::defs::ProfileViewBasic) -> Self {
-        let handle = format!("@{}", value.handle.as_str());
-        match value.display_name {
-            Some(display_name) => Self {
-                name: display_name,
-                opt_name: Some(handle),
-            },
-            None => Self {
-                name: handle,
-                opt_name: None,
-            },
         }
     }
 }
