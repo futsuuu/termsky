@@ -1,12 +1,19 @@
 use std::sync::{Arc, Mutex};
 
-use anyhow::Result;
 use atrium_api::app::bsky::notification::list_notifications;
 
 use super::Agent;
 
 pub type Notification = Arc<list_notifications::Notification>;
-pub type GetNotificationsResult = Result<Vec<Notification>>;
+pub type GetNotificationsResult = Result<Vec<Notification>, GetNotificationsError>;
+
+#[derive(thiserror::Error, Debug)]
+pub enum GetNotificationsError {
+    #[error(transparent)]
+    ATrium(#[from] atrium_xrpc::error::Error<list_notifications::Error>),
+    #[error("all notifications have been loaded")]
+    EndOfNotification,
+}
 
 pub(super) struct Notifications {
     notifications: Mutex<Vec<Notification>>,
@@ -25,6 +32,9 @@ impl Default for Notifications {
 impl Notifications {
     pub async fn get_old(&self, agent: Agent) -> GetNotificationsResult {
         let cursor = self.cursor.lock().unwrap().clone();
+        if cursor.is_none() && !self.notifications.lock().unwrap().is_empty() {
+            return Err(GetNotificationsError::EndOfNotification);
+        }
         let r = list_notifications(
             agent,
             list_notifications::Parameters {
@@ -44,11 +54,11 @@ impl Notifications {
     }
 }
 
-#[tracing::instrument(ret, err, skip(agent))]
+#[tracing::instrument(err, skip(agent))]
 async fn list_notifications(
     agent: Agent,
     params: list_notifications::Parameters,
-) -> anyhow::Result<list_notifications::Output> {
+) -> atrium_xrpc::error::Result<list_notifications::Output, list_notifications::Error> {
     let notifications = agent
         .api
         .app
@@ -56,9 +66,9 @@ async fn list_notifications(
         .notification
         .list_notifications(params)
         .await?;
-    anyhow::ensure!(
-        notifications.cursor.is_some(),
-        "cannot load more notifications"
-    );
+    tracing::info!("receive {} notifications", notifications.notifications.len());
+    if notifications.cursor.is_none() {
+        tracing::info!("all notifications have been received");
+    }
     Ok(notifications)
 }

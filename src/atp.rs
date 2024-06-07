@@ -11,7 +11,7 @@ use atrium_xrpc_client::reqwest::{ReqwestClient, ReqwestClientBuilder};
 use tracing::instrument;
 
 use notifications::Notifications;
-pub use notifications::{GetNotificationsResult, Notification};
+pub use notifications::{GetNotificationsError, GetNotificationsResult, Notification};
 pub use response::Response;
 use session::FileStore;
 

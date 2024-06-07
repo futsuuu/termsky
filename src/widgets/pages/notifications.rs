@@ -20,6 +20,7 @@ pub struct Notifications {
     blank_height: Cell<Option<u16>>,
     notifications: Vec<Notification>,
     response: Response<crate::atp::GetNotificationsResult>,
+    loaded_all: bool,
 }
 
 impl Notifications {
@@ -63,14 +64,23 @@ impl ratatui::widgets::WidgetRef for Notifications {
 
 impl crate::app::EventHandler for Notifications {
     fn on_render(&mut self, app: &mut App) {
-        if self.blank_height.get().is_some() && self.response.is_empty() {
+        if self.blank_height.get().is_some() && !self.loaded_all && self.response.is_empty() {
             self.response = app.atp.get_notifications();
         }
 
-        if let Some(Ok(notifications)) = self.response.take_data() {
-            for notification in notifications {
-                self.notifications.push(Notification::from(notification));
+        let Some(response) = self.response.take_data() else {
+            return;
+        };
+        match response {
+            Ok(notifications) => {
+                for notification in notifications {
+                    self.notifications.push(Notification::from(notification));
+                }
             }
+            Err(crate::atp::GetNotificationsError::EndOfNotification) => {
+                self.loaded_all = true;
+            }
+            Err(crate::atp::GetNotificationsError::ATrium(_)) => (),
         }
     }
 
