@@ -1,8 +1,5 @@
-use atrium_api::{
-    app::bsky::{self, feed::defs::FeedViewPost},
-    records,
-    types::Union,
-};
+use atrium_api::{app::bsky, records, types::Union};
+use indexmap::IndexMap;
 use ratatui::{prelude::*, widgets::*};
 
 use crate::{
@@ -16,7 +13,7 @@ use crate::{
 
 #[derive(Debug, Default)]
 pub struct Posts {
-    posts: Vec<Post>,
+    posts: IndexMap<String, Post>,
     pub scroll: u16,
 }
 
@@ -26,12 +23,12 @@ pub struct PostsState {
 }
 
 impl Posts {
-    pub fn add_post(&mut self, post: FeedViewPost, new: bool) {
+    pub fn add_post(&mut self, uri: String, post: crate::atp::Post, new: bool) {
         let post = post.into();
         if new {
-            self.posts.insert(0, post);
+            self.posts.shift_insert(0, uri, post);
         } else {
-            self.posts.push(post);
+            self.posts.insert(uri, post);
         }
     }
 }
@@ -41,7 +38,7 @@ impl StatefulWidgetRef for Posts {
 
     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         let mut store = Store::new().scroll_v(self.scroll as i32);
-        for post in &self.posts {
+        for post in self.posts.values() {
             Block::new()
                 .borders(Borders::BOTTOM)
                 .border_style(Style::new().blue().dim())
@@ -62,7 +59,7 @@ nestify::nest! {
         likes: u64,
         replies: u64,
         reposts: u64,
-        reposted_by: Option<Account>,
+        reposted_by: Vec<Account>,
         embed: Option<enum Embed {
             Media(enum EmbedMedia {
                 External(struct EmbedExternal {
@@ -86,9 +83,9 @@ nestify::nest! {
     }
 }
 
-impl From<FeedViewPost> for Post {
-    fn from(value: FeedViewPost) -> Self {
-        let post = &value.post;
+impl From<crate::atp::Post> for Post {
+    fn from(value: crate::atp::Post) -> Self {
+        let post = value.post();
         Self {
             author: post.author.clone().into(),
             content: match &post.record {
@@ -100,12 +97,14 @@ impl From<FeedViewPost> for Post {
             likes: post.like_count.unwrap_or(0) as u64,
             replies: post.reply_count.unwrap_or(0) as u64,
             reposts: post.repost_count.unwrap_or(0) as u64,
-            reposted_by: match value.reason {
-                Some(Union::Refs(bsky::feed::defs::FeedViewPostReasonRefs::ReasonRepost(
-                    repost,
-                ))) => Some(repost.by.into()),
-                _ => None,
-            },
+            reposted_by: value
+                .reasons()
+                .into_iter()
+                .map(|r| match r {
+                    bsky::feed::defs::FeedViewPostReasonRefs::ReasonRepost(repost) => repost.by,
+                })
+                .map(Into::into)
+                .collect(),
             embed: match post.embed.clone() {
                 Some(Union::Refs(embed)) => Some(embed.into()),
                 _ => None,
@@ -127,7 +126,7 @@ impl From<Box<bsky::embed::record::ViewRecord>> for Post {
             likes: value.like_count.unwrap_or(0) as u64,
             replies: value.reply_count.unwrap_or(0) as u64,
             reposts: value.repost_count.unwrap_or(0) as u64,
-            reposted_by: None,
+            reposted_by: Vec::new(),
             embed: value
                 .embeds
                 .and_then(|e| {
@@ -248,7 +247,7 @@ impl From<bsky::embed::images::ViewImage> for EmbedImage {
 
 impl<'a> Storeable<'a> for &'a Post {
     fn store(self, area: Rect, store: &mut Store<'a>) {
-        if let Some(reposted_by) = &self.reposted_by {
+        for reposted_by in &self.reposted_by {
             Text::from(format!("  Reposted by {}", reposted_by.name))
                 .store(store.bottom_space(area).height(1), store);
         }

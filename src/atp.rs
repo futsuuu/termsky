@@ -1,4 +1,5 @@
 mod notifications;
+mod posts;
 mod response;
 mod session;
 pub mod types;
@@ -6,17 +7,20 @@ pub mod types;
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use atrium_api::{agent::AtpAgent, app::bsky};
+use atrium_api::agent::AtpAgent;
 use atrium_xrpc_client::reqwest::{ReqwestClient, ReqwestClientBuilder};
 use tracing::instrument;
 
-use notifications::Notifications;
-pub use notifications::{GetNotificationsError, GetNotificationsResult, Notification};
-pub use response::Response;
-use session::FileStore;
+use self::notifications::Notifications;
+pub use self::notifications::{GetNotificationsError, GetNotificationsResult, Notification};
+use self::posts::Posts;
+pub use self::posts::{GetTimelineResult, Post};
+pub use self::response::Response;
+use self::session::FileStore;
 
 pub struct Atp {
     agent: Agent,
+    posts: Arc<Posts>,
     notifications: Arc<Notifications>,
 }
 
@@ -31,6 +35,7 @@ impl Atp {
         let session_store = FileStore::new()?;
         Ok(Self {
             agent: Arc::new(AtpAgent::new(xrpc_client, session_store)),
+            posts: Arc::new(Posts::default()),
             notifications: Arc::new(Notifications::default()),
         })
     }
@@ -40,11 +45,10 @@ impl Atp {
         Arc::clone(&self.agent)
     }
 
-    pub fn get_timeline(
-        &self,
-        params: bsky::feed::get_timeline::Parameters,
-    ) -> Response<GetTimelineResult> {
-        Response::new(get_timeline(self.agent(), params))
+    pub fn get_timeline(&self) -> Response<GetTimelineResult> {
+        let agent = self.agent();
+        let posts = Arc::clone(&self.posts);
+        Response::new(async move { posts.get_timeline(agent).await })
     }
 
     pub fn get_notifications(&self) -> Response<GetNotificationsResult> {
@@ -60,17 +64,6 @@ impl Atp {
     pub fn resume_session(&self) -> Response<ResumeSessionResult> {
         Response::new(resume_session(self.agent()))
     }
-}
-
-pub type GetTimelineResult = Result<bsky::feed::get_timeline::Output>;
-
-#[instrument(ret, err, skip(agent))]
-async fn get_timeline(
-    agent: Agent,
-    params: bsky::feed::get_timeline::Parameters,
-) -> GetTimelineResult {
-    let timeline = agent.api.app.bsky.feed.get_timeline(params).await?;
-    Ok(timeline)
 }
 
 pub type LoginResult = Result<()>;

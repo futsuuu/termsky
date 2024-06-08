@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 
-use atrium_api::app::bsky;
 use ratatui::{prelude::*, widgets::*};
 
 use crate::{
@@ -14,26 +13,9 @@ pub struct Home {
     posts: Posts,
     posts_state: RefCell<PostsState>,
     response: Response<crate::atp::GetTimelineResult>,
-    /// Used to get old posts
-    post_cursor: Option<String>,
 }
 
 impl Home {
-    pub fn get_timeline_params(&self) -> bsky::feed::get_timeline::Parameters {
-        bsky::feed::get_timeline::Parameters {
-            algorithm: None,
-            cursor: self.post_cursor.clone(),
-            limit: 15.try_into().ok(),
-        }
-    }
-
-    pub fn recv_timeline(&mut self, timeline: bsky::feed::get_timeline::Output) {
-        self.post_cursor = timeline.cursor;
-        for post in timeline.feed {
-            self.posts.add_post(post, false);
-        }
-    }
-
     pub fn scroll_up(&mut self) {
         self.posts.scroll = self.posts.scroll.saturating_sub(1);
     }
@@ -77,11 +59,13 @@ impl WidgetRef for Home {
 impl crate::app::EventHandler for Home {
     fn on_render(&mut self, app: &mut App) {
         if self.posts_state.borrow().blank_height.is_some() && self.response.is_empty() {
-            self.response = app.atp.get_timeline(self.get_timeline_params());
+            self.response = app.atp.get_timeline();
         }
 
         if let Some(Ok(timeline)) = self.response.take_data() {
-            self.recv_timeline(timeline);
+            for (uri, post) in timeline {
+                self.posts.add_post(uri, post, false);
+            }
         }
     }
 

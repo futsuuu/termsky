@@ -1604,6 +1604,7 @@ dependencies = [
  "crossterm",
  "dirs",
  "futures-util",
+ "indexmap",
  "nestify",
  "ratatui",
  "reqwest",
