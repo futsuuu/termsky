@@ -1,4 +1,8 @@
-use ratatui::{prelude::*, widgets::*};
+use ratatui::{
+    layout::Rect,
+    style::{Style, Styled, Stylize},
+    widgets::*,
+};
 
 use crate::widgets::{
     atoms::{BlockExt, Text},

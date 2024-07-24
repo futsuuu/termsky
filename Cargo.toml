@@ -13,17 +13,17 @@ anyhow = "1.0"
 tracing = { version = "0.1", features = ["release_max_level_off", "max_level_trace"] }
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt"] }
 
-atrium-api = "0.22.2"
+atrium-api = "0.22.3"
 atrium-xrpc-client = "0.5.5"
 reqwest = "*"
 async-trait = "*"
 serde_json = "1.0"
 dirs = "5.0"
 
-ratatui = { version = "0.26.3", features = ["unstable-widget-ref"] }
+ratatui = { version = "0.27.0", features = ["unstable-widget-ref"] }
 crossterm = { version = "0.27", features = ["event-stream"] }
 futures-util = { version = "0.3", default-features = false }
-tui-textarea = "0.4"
+tui-textarea = "0.5"
 textwrap = "0.16"
 
 nestify = "0.3"
